@@ -507,17 +507,24 @@ func renderTenantAppBody(
       return;
     }
     if(it.kind === "create_contact"){
-      // Submit to the explicit quick-create endpoint (no auto-create).
-      var f = document.createElement("form");
-      f.method = "POST";
-      f.action = "/t/" + tenantSlug + "/contacts/quick";
-      var inp = document.createElement("input");
-      inp.type = "hidden";
-      inp.name = "name";
-      inp.value = it.name;
-      f.appendChild(inp);
-      document.body.appendChild(f);
-      f.submit();
+      // Create via JSON so we can keep the user in the omnibar and commit a chip.
+      var fdC = new FormData();
+      fdC.append("name", String(it.name || ""));
+      fetch("/t/" + tenantSlug + "/contacts/quick", {method:"POST", body: fdC, headers: {"Accept":"application/json"}})
+        .then(function(r){ if(!r.ok) throw new Error("bad"); return r.json(); })
+        .then(function(data){
+          if(data && data.contact && data.contact.id){
+            addTargetChip({id: data.contact.id, name: data.contact.name || it.name || "", company: data.contact.company || ""});
+          }
+          input.value = "";
+          setOpen(false);
+          panel.innerHTML = "";
+          items = [];
+          pickMode = false;
+          pickPayload = null;
+          input.focus();
+        })
+        .catch(function(){ /* no-op */ });
       return;
     }
     if(it.kind === "log_interaction"){

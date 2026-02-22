@@ -179,15 +179,24 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
 		return
 	}
+	wantsJSON := strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
 	if !s.requireCSRF(w, r) {
 		return
 	}
 	if err := parseMaybeMultipartForm(r); err != nil {
+		if wantsJSON {
+			s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form"})
+			return
+		}
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
+		if wantsJSON {
+			s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "contact name is required"})
+			return
+		}
 		s.handleApp(w, r, tenant, appViewState{Flash: "Contact name is required."})
 		return
 	}
@@ -200,12 +209,33 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 	defer db.Close()
 
 	if err := db.CreateContact(name, "", "", "", ""); err != nil {
+		if wantsJSON {
+			s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "contact creation failed"})
+			return
+		}
 		s.handleApp(w, r, tenant, appViewState{Flash: "Contact creation failed: " + err.Error()})
 		return
 	}
 	createdMatches, _ := db.SearchContacts(name, 1)
 	if len(createdMatches) == 1 {
+		if wantsJSON {
+			c := createdMatches[0]
+			s.writeJSON(w, http.StatusOK, map[string]any{
+				"ok": true,
+				"contact": omniContact{
+					ID:        c.ID,
+					Name:      c.Name,
+					Company:   c.Company,
+					UpdatedAt: c.UpdatedAt,
+				},
+			})
+			return
+		}
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/contacts/"+strconv.FormatInt(createdMatches[0].ID, 10), http.StatusSeeOther)
+		return
+	}
+	if wantsJSON {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "contact creation failed"})
 		return
 	}
 	s.handleApp(w, r, tenant, appViewState{Flash: "Contact created."})
