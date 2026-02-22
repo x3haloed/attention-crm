@@ -624,6 +624,38 @@ func renderTenantAppBody(
       .catch(function(){ setOpen(false); });
   }
 
+  function submitQuickInteractionIfReady(){
+    if(pickMode) return false;
+    var intent = getIntent();
+    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting") return false;
+    var target = firstTarget();
+    if(!target || !target.id) return false;
+    var content = String(input.value || "").trim();
+    if(content === "") return false;
+
+    var f = document.createElement("form");
+    f.method = "POST";
+    f.action = "/t/" + tenantSlug + "/interactions/quick";
+    var i1 = document.createElement("input");
+    i1.type = "hidden";
+    i1.name = "contact_id";
+    i1.value = String(target.id);
+    f.appendChild(i1);
+    var i2 = document.createElement("input");
+    i2.type = "hidden";
+    i2.name = "type";
+    i2.value = String(intent);
+    f.appendChild(i2);
+    var i3 = document.createElement("input");
+    i3.type = "hidden";
+    i3.name = "content";
+    i3.value = String(content);
+    f.appendChild(i3);
+    document.body.appendChild(f);
+    f.submit();
+    return true;
+  }
+
   input.addEventListener("keydown", function(e){
     if(e.key === ":"){
       var tok = String(input.value || "").trim().toLowerCase();
@@ -649,7 +681,9 @@ func renderTenantAppBody(
     if(!open){
       if(e.key === "Enter"){
         e.preventDefault();
-        fetchResults();
+        if(!submitQuickInteractionIfReady()){
+          fetchResults();
+        }
       }
       return;
     }
