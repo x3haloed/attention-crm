@@ -712,19 +712,20 @@ func renderTenantAppBody(
   renderChips();
 
   // Quick-capture buttons: focus omnibar and set intent chip.
-  document.querySelectorAll("[data-omni-intent]").forEach(function(btn){
-    btn.addEventListener("click", function(e){
-      e.preventDefault();
-      var intent = String(btn.getAttribute("data-omni-intent") || "");
-      if(intent){ setIntentChip(intent); }
-      input.value = "";
-      setOpen(false);
-      panel.innerHTML = "";
-      items = [];
-      pickMode = false;
-      pickPayload = null;
-      input.focus();
-    });
+  // Use event delegation because the buttons render *after* this script tag in the HTML.
+  document.addEventListener("click", function(e){
+    var btn = e.target && e.target.closest ? e.target.closest("[data-omni-intent]") : null;
+    if(!btn) return;
+    e.preventDefault();
+    var intent = String(btn.getAttribute("data-omni-intent") || "");
+    if(intent){ setIntentChip(intent); }
+    input.value = "";
+    setOpen(false);
+    panel.innerHTML = "";
+    items = [];
+    pickMode = false;
+    pickPayload = null;
+    input.focus();
   });
 
   document.addEventListener("click", function(e){
