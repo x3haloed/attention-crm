@@ -2341,6 +2341,30 @@ func renderTenantAppBody(
     return false;
   }
 
+  function setIntentChip(intent){
+    intent = String(intent || "").trim().toLowerCase();
+    if(intent === "meet") intent = "meeting";
+    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting") return;
+
+    // Remove any existing intent chip, then add as the left-most chip.
+    chips = chips.filter(function(c){ return c.kind !== "intent"; });
+    chips.unshift({
+      kind: "intent",
+      intent: intent,
+      label: intent.charAt(0).toUpperCase() + intent.slice(1)
+    });
+    renderChips();
+  }
+
+  function maybeCommitIntentFromInput(){
+    var v = String(input.value || "");
+    var m = v.match(/^\\s*(note|call|email|meeting|meet)\\s*:\\s*/i);
+    if(!m) return false;
+    setIntentChip(m[1]);
+    input.value = v.slice(m[0].length);
+    return true;
+  }
+
   function addTargetChip(contact){
     if(!contact || !contact.id) return;
     if(hasTargetChip(contact.id)) return;
@@ -2364,6 +2388,15 @@ func renderTenantAppBody(
   function renderChips(){
     var html = "";
     chips.forEach(function(c, idx){
+      if(c.kind === "intent"){
+        html += '<span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 text-gray-900 text-sm font-medium">' +
+          '<span>'+escHtml(c.label)+'</span>' +
+          '<button type="button" class="text-gray-700 hover:text-gray-900" aria-label="Remove" data-chip-idx="'+idx+'">' +
+            '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42Z"/></svg>' +
+          '</button>' +
+        '</span>';
+        return;
+      }
       if(c.kind === "target"){
         html += '<span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-900 text-sm">' +
           '<a class="hover:underline" href="'+escHtml(c.href)+'">'+escHtml(c.label)+'</a>' +
@@ -2664,6 +2697,19 @@ func renderTenantAppBody(
   }
 
   input.addEventListener("keydown", function(e){
+    if(e.key === ":"){
+      var tok = String(input.value || "").trim().toLowerCase();
+      if(tok === "note" || tok === "call" || tok === "email" || tok === "meeting" || tok === "meet"){
+        e.preventDefault();
+        setIntentChip(tok);
+        input.value = "";
+        setOpen(false);
+        panel.innerHTML = "";
+        items = [];
+        input.focus();
+        return;
+      }
+    }
     if(e.key === "Backspace" && !open){
       var q0 = (input.value || "");
       if(q0.trim() === "" && chips.length > 0){
@@ -2726,6 +2772,12 @@ func renderTenantAppBody(
   });
 
   input.addEventListener("input", function(){
+    // note: / call: / email: / meeting:
+    if(maybeCommitIntentFromInput()){
+      setOpen(false);
+      panel.innerHTML = "";
+      items = [];
+    }
     if(timer) clearTimeout(timer);
     timer = setTimeout(fetchResults, 120);
   });
