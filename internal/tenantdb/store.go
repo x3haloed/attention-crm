@@ -558,6 +558,70 @@ LIMIT ?
 	return out, rows.Err()
 }
 
+func (s *Store) ListDealsNeedsAttention(limit int) ([]Deal, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	cutoff := now.Add(48 * time.Hour).Format(time.RFC3339Nano)
+
+	rows, err := s.db.Query(`
+SELECT id, title, state, value_cents, stage_label, next_step, next_step_due_at, next_step_completed_at,
+       close_window_start, close_window_end, closed_at, closed_outcome, last_activity_at, created_at, updated_at
+FROM deals
+WHERE workspace_id = ?
+  AND state = 'open'
+  AND (
+    TRIM(COALESCE(next_step, '')) = ''
+    OR (next_step_due_at IS NOT NULL AND next_step_due_at != '' AND next_step_completed_at IS NULL AND next_step_due_at <= ?)
+  )
+ORDER BY
+  CASE WHEN TRIM(COALESCE(next_step, '')) = '' THEN 0 ELSE 1 END ASC,
+  COALESCE(next_step_due_at, '') ASC,
+  last_activity_at DESC,
+  id DESC
+LIMIT ?
+`, workspaceID, cutoff, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Deal
+	for rows.Next() {
+		var d Deal
+		if err := rows.Scan(
+			&d.ID,
+			&d.Title,
+			&d.State,
+			&d.ValueCents,
+			&d.StageLabel,
+			&d.NextStep,
+			&d.NextStepDueAt,
+			&d.NextStepCompleted,
+			&d.CloseWindowStart,
+			&d.CloseWindowEnd,
+			&d.ClosedAt,
+			&d.ClosedOutcome,
+			&d.LastActivityAt,
+			&d.CreatedAt,
+			&d.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) MarkInteractionComplete(interactionID int64) error {
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {

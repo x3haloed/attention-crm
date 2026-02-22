@@ -30,13 +30,18 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	needsDeals, err := db.ListDealsNeedsAttention(20)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	recent, err := db.ListRecentInteractions(50)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, recent)
+	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, needsDeals, recent)
 	csrf := s.ensureCSRFCookie(w, r)
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{Title: "Attention CRM", Body: body, CSRFToken: csrf})
 }

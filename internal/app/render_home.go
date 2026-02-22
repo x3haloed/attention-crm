@@ -15,6 +15,7 @@ func renderTenantAppBody(
 	state appViewState,
 	contacts []tenantdb.Contact,
 	needsAttention []tenantdb.Interaction,
+	needsDeals []tenantdb.Deal,
 	recent []tenantdb.Interaction,
 ) template.HTML {
 	var b strings.Builder
@@ -818,23 +819,59 @@ func renderTenantAppBody(
 	// Needs Attention
 	b.WriteString(`<div id="needs-attention-section" class="col-span-5"><div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">`)
 	b.WriteString(`<div class="flex items-center justify-between mb-6"><h2 class="text-lg font-semibold text-gray-900">Needs Attention</h2>`)
-	b.WriteString(`<span class="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">` + strconv.Itoa(len(needsAttention)) + `</span></div>`)
-	if len(needsAttention) == 0 {
-		b.WriteString(`<div class="text-sm text-gray-600">No follow-ups due.</div>`)
+	b.WriteString(`<span class="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">` + strconv.Itoa(len(needsAttention)+len(needsDeals)) + `</span></div>`)
+
+	if len(needsAttention) == 0 && len(needsDeals) == 0 {
+		b.WriteString(`<div class="text-sm text-gray-600">Nothing due right now.</div>`)
 	} else {
-		b.WriteString(`<div class="space-y-4">`)
-		for _, it := range needsAttention {
-			bgClass, iconClass, meta, actionText := attentionItemMeta(it, now)
-			b.WriteString(`<div class="flex items-start space-x-3 p-3 ` + bgClass + ` rounded-lg">`)
-			b.WriteString(`<svg class="w-4 h-4 ` + iconClass + ` mt-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 8v5l4 2-1 1.732L10 14V8h2Zm0-6a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>`)
-			b.WriteString(`<div class="flex-1">`)
-			b.WriteString(`<p class="text-sm font-medium text-gray-900">Follow up with ` + template.HTMLEscapeString(it.ContactName) + `</p>`)
-			b.WriteString(`<p class="text-xs mt-1 ` + iconClass + `">` + template.HTMLEscapeString(meta) + `</p>`)
-			b.WriteString(`</div>`)
-			b.WriteString(`<a class="text-xs font-medium hover:underline ` + iconClass + `" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(it.ContactID, 10) + `">` + template.HTMLEscapeString(actionText) + `</a>`)
+		if len(needsAttention) > 0 {
+			b.WriteString(`<div class="space-y-4">`)
+			for _, it := range needsAttention {
+				bgClass, iconClass, meta, actionText := attentionItemMeta(it, now)
+				b.WriteString(`<div class="flex items-start space-x-3 p-3 ` + bgClass + ` rounded-lg">`)
+				b.WriteString(`<svg class="w-4 h-4 ` + iconClass + ` mt-1" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 8v5l4 2-1 1.732L10 14V8h2Zm0-6a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/></svg>`)
+				b.WriteString(`<div class="flex-1">`)
+				b.WriteString(`<p class="text-sm font-medium text-gray-900">Follow up with ` + template.HTMLEscapeString(it.ContactName) + `</p>`)
+				b.WriteString(`<p class="text-xs mt-1 ` + iconClass + `">` + template.HTMLEscapeString(meta) + `</p>`)
+				b.WriteString(`</div>`)
+				b.WriteString(`<a class="text-xs font-medium hover:underline ` + iconClass + `" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(it.ContactID, 10) + `">` + template.HTMLEscapeString(actionText) + `</a>`)
+				b.WriteString(`</div>`)
+			}
 			b.WriteString(`</div>`)
 		}
-		b.WriteString(`</div>`)
+
+		if len(needsDeals) > 0 {
+			if len(needsAttention) > 0 {
+				b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100"></div>`)
+			}
+			b.WriteString(`<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Deals</div>`)
+			b.WriteString(`<div class="space-y-3">`)
+			for _, d := range needsDeals {
+				title := strings.TrimSpace(d.Title)
+				if title == "" {
+					title = "Untitled"
+				}
+				meta := ""
+				if strings.TrimSpace(d.NextStep) == "" {
+					meta = "Next step needed"
+				} else {
+					meta = "Next: " + snippet(d.NextStep, 64)
+				}
+				if d.NextStepDueAt.Valid && d.NextStepCompleted.Valid == false {
+					meta = meta + " • Due: " + dueDisplay(d.NextStepDueAt.String, now)
+				}
+				b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(d.ID, 10) + `" class="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50">`)
+				b.WriteString(`<div class="flex items-start justify-between gap-3">`)
+				b.WriteString(`<div class="min-w-0">`)
+				b.WriteString(`<div class="text-sm font-medium text-gray-900 truncate">` + template.HTMLEscapeString(title) + `</div>`)
+				b.WriteString(`<div class="mt-1 text-xs text-gray-600">` + template.HTMLEscapeString(meta) + `</div>`)
+				b.WriteString(`</div>`)
+				b.WriteString(`<div class="shrink-0">` + dealStateBadge(d.State) + `</div>`)
+				b.WriteString(`</div>`)
+				b.WriteString(`</a>`)
+			}
+			b.WriteString(`</div>`)
+		}
 	}
 	b.WriteString(`</div></div>`)
 
