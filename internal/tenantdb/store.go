@@ -588,6 +588,15 @@ type Invite struct {
 	RedeemedAt  sql.NullString
 	StartedAt   sql.NullString
 	StartedUser sql.NullInt64
+	RevokedAt   sql.NullString
+}
+
+type Member struct {
+	UserID    int64
+	Email     string
+	Name      string
+	IsOwner   bool
+	CreatedAt string
 }
 
 func (s *Store) IsOwner(userID int64) (bool, error) {
@@ -652,16 +661,19 @@ func (s *Store) InviteByToken(token string) (Invite, error) {
 	}
 	hash := sha256.Sum256([]byte(strings.TrimSpace(token)))
 	row := s.db.QueryRow(`
-SELECT id, email, created_by_user_id, created_at, expires_at, redeemed_at, redeem_started_at, redeem_user_id
+SELECT id, email, created_by_user_id, created_at, expires_at, redeemed_at, redeem_started_at, redeem_user_id, revoked_at
 FROM invites
 WHERE workspace_id = ? AND token_hash = ?
 `, workspaceID, hash[:])
 	var inv Invite
-	if err := row.Scan(&inv.ID, &inv.Email, &inv.CreatedByID, &inv.CreatedAt, &inv.ExpiresAt, &inv.RedeemedAt, &inv.StartedAt, &inv.StartedUser); err != nil {
+	if err := row.Scan(&inv.ID, &inv.Email, &inv.CreatedByID, &inv.CreatedAt, &inv.ExpiresAt, &inv.RedeemedAt, &inv.StartedAt, &inv.StartedUser, &inv.RevokedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Invite{}, errors.New("invite not found")
 		}
 		return Invite{}, err
+	}
+	if inv.RevokedAt.Valid {
+		return Invite{}, errors.New("invite revoked")
 	}
 	return inv, nil
 }
@@ -686,7 +698,7 @@ func (s *Store) StartInviteRedemption(token, name string) (User, error) {
 	defer tx.Rollback()
 
 	row := tx.QueryRow(`
-SELECT id, email, expires_at, redeemed_at, redeem_user_id
+SELECT id, email, expires_at, redeemed_at, redeem_user_id, revoked_at
 FROM invites
 WHERE workspace_id = ? AND token_hash = ?
 `, workspaceID, hash[:])
@@ -695,11 +707,15 @@ WHERE workspace_id = ? AND token_hash = ?
 	var expiresAt string
 	var redeemedAt sql.NullString
 	var redeemUserID sql.NullInt64
-	if err := row.Scan(&inviteID, &email, &expiresAt, &redeemedAt, &redeemUserID); err != nil {
+	var revokedAt sql.NullString
+	if err := row.Scan(&inviteID, &email, &expiresAt, &redeemedAt, &redeemUserID, &revokedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return User{}, errors.New("invite not found")
 		}
 		return User{}, err
+	}
+	if revokedAt.Valid {
+		return User{}, errors.New("invite revoked")
 	}
 	if redeemedAt.Valid {
 		return User{}, errors.New("invite already redeemed")
@@ -771,6 +787,7 @@ SET redeemed_at = ?
 WHERE workspace_id = ?
   AND token_hash = ?
   AND redeem_user_id = ?
+  AND revoked_at IS NULL
   AND redeemed_at IS NULL
 `, time.Now().UTC().Format(time.RFC3339), workspaceID, hash[:], userID)
 	if err != nil {
@@ -784,6 +801,107 @@ WHERE workspace_id = ?
 		return errors.New("invite not found or already redeemed")
 	}
 	return nil
+}
+
+func (s *Store) ListInvites(limit int) ([]Invite, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`
+SELECT id, email, created_by_user_id, created_at, expires_at, redeemed_at, redeem_started_at, redeem_user_id, revoked_at
+FROM invites
+WHERE workspace_id = ?
+ORDER BY created_at DESC
+LIMIT ?
+`, workspaceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Invite
+	for rows.Next() {
+		var inv Invite
+		if err := rows.Scan(&inv.ID, &inv.Email, &inv.CreatedByID, &inv.CreatedAt, &inv.ExpiresAt, &inv.RedeemedAt, &inv.StartedAt, &inv.StartedUser, &inv.RevokedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RevokeInvite(inviteID int64, byUserID int64) error {
+	if inviteID <= 0 || byUserID <= 0 {
+		return errors.New("invite id and user required")
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return err
+	}
+	isOwner, err := s.IsOwner(byUserID)
+	if err != nil {
+		return err
+	}
+	if !isOwner {
+		return errors.New("only owner can revoke invites")
+	}
+	res, err := s.db.Exec(`
+UPDATE invites
+SET revoked_at = ?
+WHERE workspace_id = ?
+  AND id = ?
+  AND redeemed_at IS NULL
+  AND revoked_at IS NULL
+`, time.Now().UTC().Format(time.RFC3339), workspaceID, inviteID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errors.New("invite not found or not revocable")
+	}
+	return nil
+}
+
+func (s *Store) ListMembers(limit int) ([]Member, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`
+SELECT u.id, u.email, u.name, m.is_owner, m.created_at
+FROM memberships m
+JOIN users u ON u.id = m.user_id
+WHERE m.workspace_id = ?
+ORDER BY m.is_owner DESC, m.created_at ASC
+LIMIT ?
+`, workspaceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Member
+	for rows.Next() {
+		var m Member
+		var isOwner int
+		if err := rows.Scan(&m.UserID, &m.Email, &m.Name, &isOwner, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		m.IsOwner = isOwner == 1
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ContactByID(contactID int64) (Contact, error) {
@@ -1226,6 +1344,7 @@ CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user
 	// Add newer invite fields for safe multi-step redemption.
 	_ = execAddColumn(db, "invites", "redeem_started_at TEXT")
 	_ = execAddColumn(db, "invites", "redeem_user_id INTEGER")
+	_ = execAddColumn(db, "invites", "revoked_at TEXT")
 	return nil
 }
 
