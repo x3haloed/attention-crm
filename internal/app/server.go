@@ -2286,7 +2286,10 @@ func renderTenantAppBody(
 	b.WriteString(`<div id="universal-action-surface" class="mb-8"><div class="relative"><div id="omni-card" class="relative bg-white rounded-2xl shadow-sm border border-gray-200 p-6">`)
 	b.WriteString(`<form id="omni-form" method="POST" action="/t/` + tenantSlugEsc + `/universal"><div class="flex items-center space-x-4">`)
 	b.WriteString(`<svg class="w-5 h-5 text-gray-400" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true" id="omni-icon"><path fill="currentColor" d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"></path></svg>`)
-	b.WriteString(`<input id="omni-input" name="q" type="text" value="` + template.HTMLEscapeString(state.UniversalText) + `" placeholder="Search contacts, deals, or add a quick note..." class="flex-1 text-lg bg-transparent border-none outline-none placeholder-gray-400 text-gray-900" autocomplete="off" spellcheck="false">`)
+	b.WriteString(`<div id="omni-input-wrap" class="flex-1 flex flex-wrap items-center gap-2">`)
+	b.WriteString(`<div id="omni-chips" class="flex flex-wrap items-center gap-2"></div>`)
+	b.WriteString(`<input id="omni-input" name="q" type="text" value="` + template.HTMLEscapeString(state.UniversalText) + `" placeholder="Search contacts, deals, or add a quick note..." class="min-w-[12rem] flex-1 text-lg bg-transparent border-none outline-none placeholder-gray-400 text-gray-900" autocomplete="off" spellcheck="false">`)
+	b.WriteString(`</div>`)
 	b.WriteString(`</div></form>`)
 
 	b.WriteString(`<div id="search-suggestions" class="mt-4 space-y-1 border-t border-gray-100 pt-4 hidden"></div>`)
@@ -2301,7 +2304,8 @@ func renderTenantAppBody(
   var card = document.getElementById("omni-card");
   var icon = document.getElementById("omni-icon");
   var panel = document.getElementById("search-suggestions");
-  if(!input || !form || !panel || !card || !icon) return;
+  var chipsEl = document.getElementById("omni-chips");
+  if(!input || !form || !panel || !card || !icon || !chipsEl) return;
 
   var items = [];
   var selected = 0;
@@ -2311,6 +2315,7 @@ func renderTenantAppBody(
   var lastResult = null;
   var timer = null;
   var lastQuery = "";
+  var chips = []; // [{kind:'target', id, label, href}]
 
   function setOpen(isOpen){
     open = isOpen;
@@ -2327,6 +2332,48 @@ func renderTenantAppBody(
 
   function escHtml(s){
     return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+
+  function hasTargetChip(id){
+    for(var i=0;i<chips.length;i++){
+      if(chips[i].kind === "target" && String(chips[i].id) === String(id)) return true;
+    }
+    return false;
+  }
+
+  function addTargetChip(contact){
+    if(!contact || !contact.id) return;
+    if(hasTargetChip(contact.id)) return;
+    var label = contact.name || "Contact";
+    if(contact.company) label = label + " • " + contact.company;
+    chips.push({
+      kind: "target",
+      id: contact.id,
+      label: label,
+      href: "/t/" + tenantSlug + "/contacts/" + contact.id
+    });
+    renderChips();
+  }
+
+  function removeChipAt(idx){
+    if(idx < 0 || idx >= chips.length) return;
+    chips.splice(idx, 1);
+    renderChips();
+  }
+
+  function renderChips(){
+    var html = "";
+    chips.forEach(function(c, idx){
+      if(c.kind === "target"){
+        html += '<span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-900 text-sm">' +
+          '<a class="hover:underline" href="'+escHtml(c.href)+'">'+escHtml(c.label)+'</a>' +
+          '<button type="button" class="text-blue-700 hover:text-blue-900" aria-label="Remove" data-chip-idx="'+idx+'">' +
+            '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42Z"/></svg>' +
+          '</button>' +
+        '</span>';
+      }
+    });
+    chipsEl.innerHTML = html;
   }
 
   function render(){
@@ -2535,6 +2582,14 @@ func renderTenantAppBody(
         fPick.submit();
         return;
       }
+      // If we already have target chips, treat Enter as "select target" rather than navigate.
+      if(chips.length > 0){
+        addTargetChip({id: it.id, name: it.name, company: it.company});
+        input.value = "";
+        setOpen(false);
+        input.focus();
+        return;
+      }
       window.location.href = "/t/" + tenantSlug + "/contacts/" + it.id;
       return;
     }
@@ -2609,12 +2664,36 @@ func renderTenantAppBody(
   }
 
   input.addEventListener("keydown", function(e){
+    if(e.key === "Backspace" && !open){
+      var q0 = (input.value || "");
+      if(q0.trim() === "" && chips.length > 0){
+        e.preventDefault();
+        removeChipAt(chips.length - 1);
+        return;
+      }
+    }
     if(!open){
       if(e.key === "Enter"){
         e.preventDefault();
         fetchResults();
       }
       return;
+    }
+    if(e.key === "Tab"){
+      // Commit chip-able rows with Tab (power user flow).
+      var itTab = items[selected];
+      if(itTab && itTab.kind === "contact"){
+        e.preventDefault();
+        addTargetChip({id: itTab.id, name: itTab.name, company: itTab.company});
+        input.value = "";
+        setOpen(false);
+        pickMode = false;
+        pickPayload = null;
+        items = [];
+        panel.innerHTML = "";
+        input.focus();
+        return;
+      }
     }
     if(e.key === "ArrowDown"){
       e.preventDefault();
@@ -2651,7 +2730,18 @@ func renderTenantAppBody(
     timer = setTimeout(fetchResults, 120);
   });
 
+  // Ensure chips render at least once.
+  renderChips();
+
   document.addEventListener("click", function(e){
+    var chipBtn = e.target && e.target.closest ? e.target.closest("[data-chip-idx]") : null;
+    if(chipBtn){
+      e.preventDefault();
+      var cidx = parseInt(chipBtn.getAttribute("data-chip-idx") || "-1", 10);
+      removeChipAt(cidx);
+      input.focus();
+      return;
+    }
     if(!card.contains(e.target)){
       setOpen(false);
       return;
