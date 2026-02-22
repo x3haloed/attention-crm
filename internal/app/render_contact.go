@@ -12,6 +12,7 @@ import (
 func renderContactDetailBody(
 	tenant control.Tenant,
 	contact tenantdb.Contact,
+	deals []tenantdb.Deal,
 	timeline []tenantdb.Interaction,
 	flash string,
 ) template.HTML {
@@ -57,6 +58,55 @@ func renderContactDetailBody(
 	b.WriteString(`</div></div></div>`)
 	b.WriteString(`<div class="flex justify-end pt-2"><button class="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm w-full sm:w-auto flex items-center justify-center space-x-2"><span>Log interaction</span></button></div>`)
 	b.WriteString(`</div></form></div>`)
+
+	// Deals.
+	b.WriteString(`<div id="deals-section" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">`)
+	b.WriteString(`<div class="flex items-center justify-between gap-4 mb-4">`)
+	b.WriteString(`<div>`)
+	b.WriteString(`<h3 class="text-lg font-semibold text-gray-900">Deals</h3>`)
+	b.WriteString(`<p class="text-sm text-gray-600">Opportunities attached to this contact.</p>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	// Create deal (minimal affordance).
+	b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/deals/quick" class="flex flex-col sm:flex-row gap-3 mb-4">`)
+	b.WriteString(`<input type="hidden" name="contact_id" value="` + strconv.FormatInt(contact.ID, 10) + `">`)
+	b.WriteString(`<input name="title" required class="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="New deal title (e.g. Annual renewal)">`)
+	b.WriteString(`<button type="submit" class="h-10 px-5 rounded-xl bg-purple-600 text-white font-medium hover:bg-purple-700 text-sm">Create deal</button>`)
+	b.WriteString(`</form>`)
+
+	if len(deals) == 0 {
+		b.WriteString(`<div class="text-sm text-gray-600">No deals yet.</div>`)
+	} else {
+		b.WriteString(`<div class="space-y-2">`)
+		for _, d := range deals {
+			title := strings.TrimSpace(d.Title)
+			if title == "" {
+				title = "Untitled"
+			}
+			state := dealStateBadge(d.State)
+			meta := ""
+			if strings.TrimSpace(d.NextStep) != "" && strings.ToLower(strings.TrimSpace(d.State)) == "open" {
+				meta = snippet(d.NextStep, 72)
+			}
+			b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(d.ID, 10) + `" class="block p-4 rounded-xl border border-gray-200 hover:bg-gray-50">`)
+			b.WriteString(`<div class="flex items-start justify-between gap-3">`)
+			b.WriteString(`<div class="min-w-0">`)
+			b.WriteString(`<div class="text-sm font-medium text-gray-900 truncate">` + template.HTMLEscapeString(title) + `</div>`)
+			if meta != "" {
+				b.WriteString(`<div class="mt-1 text-xs text-gray-600">Next: ` + template.HTMLEscapeString(meta) + `</div>`)
+			}
+			if d.LastActivityAt != "" {
+				b.WriteString(`<div class="mt-1 text-xs text-gray-500">Updated ` + template.HTMLEscapeString(relativeTime(d.LastActivityAt, now)) + `</div>`)
+			}
+			b.WriteString(`</div>`)
+			b.WriteString(`<div class="shrink-0">` + state + `</div>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`</a>`)
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</div>`)
 
 	// Timeline.
 	b.WriteString(`<div id="timeline-section" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">`)

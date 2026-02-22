@@ -134,8 +134,14 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	deals, err := db.ListDealsByContact(contactID, 50)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	header := renderContactHeader(tenant, contact)
-	body := renderContactDetailBody(tenant, contact, timeline, flash)
+	body := renderContactDetailBody(tenant, contact, deals, timeline, flash)
 	csrf := s.ensureCSRFCookie(w, r)
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     contact.Name,
