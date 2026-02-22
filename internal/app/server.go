@@ -4,12 +4,15 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"html/template"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,6 +25,7 @@ import (
 	"attention-crm/web"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"golang.org/x/time/rate"
 )
 
 type Server struct {
@@ -34,6 +38,11 @@ type Server struct {
 	webauthn     *webauthn.WebAuthn
 	flowMu       sync.Mutex
 	webauthnFlow map[string]ceremonyFlow
+
+	limMu    sync.Mutex
+	lim      map[string]*rate.Limiter
+	limSeen  map[string]time.Time
+	limSweep time.Time
 }
 
 type ceremonyFlow struct {
@@ -76,7 +85,121 @@ func NewServer(cfg Config) (*Server, error) {
 		tenantApp:    tenantApp,
 		webauthn:     wa,
 		webauthnFlow: map[string]ceremonyFlow{},
+		lim:          map[string]*rate.Limiter{},
+		limSeen:      map[string]time.Time{},
 	}, nil
+}
+
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return true
+	}
+	return false
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		first := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if first != "" {
+			return first
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+func (s *Server) allowRate(r *http.Request, bucket string, perSecond float64, burst int) bool {
+	ip := clientIP(r)
+	key := bucket + "|" + ip
+
+	s.limMu.Lock()
+	defer s.limMu.Unlock()
+
+	now := time.Now()
+	s.limSeen[key] = now
+
+	lim := s.lim[key]
+	if lim == nil {
+		lim = rate.NewLimiter(rate.Limit(perSecond), burst)
+		s.lim[key] = lim
+	}
+
+	// Opportunistic sweep to bound memory.
+	if s.limSweep.IsZero() || now.Sub(s.limSweep) > 5*time.Minute {
+		cutoff := now.Add(-15 * time.Minute)
+		for k, seen := range s.limSeen {
+			if seen.Before(cutoff) {
+				delete(s.limSeen, k)
+				delete(s.lim, k)
+			}
+		}
+		s.limSweep = now
+	}
+
+	return lim.Allow()
+}
+
+func randomTokenB64(n int) string {
+	buf := make([]byte, n)
+	_, _ = rand.Read(buf)
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string {
+	if c, err := r.Cookie("attention_csrf"); err == nil && c.Value != "" {
+		return c.Value
+	}
+	token := randomTokenB64(32)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "attention_csrf",
+		Value:    token,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+		Expires:  time.Now().Add(24 * time.Hour),
+	})
+	return token
+}
+
+func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+
+	c, err := r.Cookie("attention_csrf")
+	if err != nil || c.Value == "" {
+		http.Error(w, "missing csrf token", http.StatusForbidden)
+		return false
+	}
+
+	token := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	if token == "" {
+		// Allow non-JS form posts by validating same-origin (Origin/Referer).
+		if sfs := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); sfs == "same-origin" || sfs == "same-site" {
+			return true
+		}
+		ref := r.Header.Get("Origin")
+		if ref == "" {
+			ref = r.Header.Get("Referer")
+		}
+		u, parseErr := url.Parse(ref)
+		if parseErr == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host) {
+			return true
+		}
+		http.Error(w, "missing csrf header", http.StatusForbidden)
+		return false
+	}
+	if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(c.Value)) != 1 {
+		http.Error(w, "csrf token mismatch", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 func (s *Server) Router() http.Handler {
@@ -132,6 +255,10 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request) {
+	if !s.allowRate(r, "setup_passkey_start", 0.5, 5) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	if err := parseMaybeMultipartForm(r); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -204,6 +331,10 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request) {
+	if !s.allowRate(r, "setup_passkey_finish", 0.5, 5) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	flowID := strings.TrimSpace(r.URL.Query().Get("flow_id"))
 	if flowID == "" {
 		http.Error(w, "missing flow_id", http.StatusBadRequest)
@@ -242,7 +373,7 @@ func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request
 		http.Error(w, "credential save failed", http.StatusInternalServerError)
 		return
 	}
-	if err := s.writeSession(w, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
+	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
 		http.Error(w, "set session failed", http.StatusInternalServerError)
 		return
 	}
@@ -312,6 +443,15 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+
 	// Best-effort local logout: clear the session cookie.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "attention_session",
@@ -319,6 +459,16 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, tenant con
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "attention_csrf",
+		Value:    "",
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
@@ -395,6 +545,9 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
 		return
 	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
 	if err := parseMaybeMultipartForm(r); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -429,6 +582,10 @@ func (s *Server) renderLogin(w http.ResponseWriter, slug, errText string) {
 }
 
 func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	if !s.allowRate(r, "login_passkey_start|"+tenant.Slug, 1, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	if err := parseMaybeMultipartForm(r); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -474,6 +631,10 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	if !s.allowRate(r, "login_passkey_finish|"+tenant.Slug, 1, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	flowID := strings.TrimSpace(r.URL.Query().Get("flow_id"))
 	if flowID == "" {
 		http.Error(w, "missing flow_id", http.StatusBadRequest)
@@ -501,7 +662,7 @@ func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 		http.Error(w, "passkey assertion failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.writeSession(w, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
+	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
 		http.Error(w, "set session failed", http.StatusInternalServerError)
 		return
 	}
@@ -541,13 +702,17 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 	}
 
 	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, recent)
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{Title: "Attention CRM", Body: body})
+	csrf := s.ensureCSRFCookie(w, r)
+	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{Title: "Attention CRM", Body: body, CSRFToken: csrf})
 }
 
 func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -586,6 +751,9 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request,
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -635,6 +803,9 @@ func (s *Server) handleCreateInteractionFromContact(w http.ResponseWriter, r *ht
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
 		return
 	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
 	contactID, ok := parseContactIDFromRest(rest)
 	if !ok {
 		http.NotFound(w, r)
@@ -682,6 +853,9 @@ func (s *Server) handleCompleteInteraction(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
 		return
 	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
 	trimmed := strings.TrimPrefix(rest, "/interactions/")
 	interactionIDRaw := strings.TrimSuffix(trimmed, "/complete")
 	interactionIDRaw = strings.Trim(interactionIDRaw, "/")
@@ -709,6 +883,9 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request, tena
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -741,6 +918,9 @@ func (s *Server) handleUniversalInput(w http.ResponseWriter, r *http.Request, te
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -844,6 +1024,9 @@ func (s *Server) handleUpdateContact(w http.ResponseWriter, r *http.Request, ten
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
 	contactID, ok := parseContactIDFromUpdateRest(rest)
 	if !ok {
 		http.NotFound(w, r)
@@ -909,6 +1092,10 @@ func (s *Server) handleInvitePage(w http.ResponseWriter, r *http.Request, tenant
 }
 
 func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	if !s.allowRate(r, "invite_passkey_start|"+tenant.Slug, 0.5, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	token, ok := parseInviteToken(rest)
 	if !ok {
 		http.NotFound(w, r)
@@ -962,6 +1149,10 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	if !s.allowRate(r, "invite_passkey_finish|"+tenant.Slug, 0.5, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	token, ok := parseInviteToken(rest)
 	if !ok {
 		http.NotFound(w, r)
@@ -1004,7 +1195,7 @@ func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "invite completion failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.writeSession(w, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
+	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
 		http.Error(w, "set session failed", http.StatusInternalServerError)
 		return
 	}
@@ -1054,12 +1245,14 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 
 	header := renderContactHeader(tenant, contact)
 	body := renderContactDetailBody(tenant, contact, timeline, flash)
+	csrf := s.ensureCSRFCookie(w, r)
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     contact.Name,
 		Header:    header,
 		MainID:    "main-content",
 		MainClass: "max-w-4xl mx-auto px-4 py-6 lg:px-6",
 		Body:      body,
+		CSRFToken: csrf,
 	})
 }
 
@@ -1068,7 +1261,7 @@ type session struct {
 	UserID     int64
 }
 
-func (s *Server) writeSession(w http.ResponseWriter, sess session) error {
+func (s *Server) writeSession(w http.ResponseWriter, r *http.Request, sess session) error {
 	payload := sess.TenantSlug + "|" + strconv.FormatInt(sess.UserID, 10)
 	sig := sign(payload, s.sessionKey)
 	raw := payload + "|" + sig
@@ -1077,10 +1270,12 @@ func (s *Server) writeSession(w http.ResponseWriter, sess session) error {
 		Value:    base64.RawURLEncoding.EncodeToString([]byte(raw)),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
 		Path:     "/",
 		Expires:  time.Now().Add(24 * time.Hour),
 	}
 	http.SetCookie(w, cookie)
+	s.ensureCSRFCookie(w, r)
 	return nil
 }
 
@@ -1250,6 +1445,7 @@ type pageData struct {
 	MainID    string
 	MainClass string
 	Body      template.HTML
+	CSRFToken string
 }
 
 type appViewState struct {
@@ -1304,8 +1500,15 @@ const tenantBaseTemplate = `{{define "page"}}<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
+  {{if .CSRFToken}}<meta name="attention-csrf" content="{{.CSRFToken}}">{{end}}
   <link rel="stylesheet" href="/static/tailwind.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    window.attentionCsrfToken = function () {
+      var m = document.querySelector('meta[name="attention-csrf"]');
+      return m ? (m.getAttribute("content") || "") : "";
+    };
+  </script>
 </head>
 <body class="bg-gray-50 font-sans">
   {{template "body" .}}
@@ -1342,7 +1545,7 @@ const tenantAppTemplate = `{{define "body"}}
                   <path d="M13 2 3 14h7l-1 8 12-14h-7l1-6z"></path>
                 </svg>
               </div>
-              <span class="text-xl font-semibold text-gray-900">FlowCRM</span>
+              <span class="text-xl font-semibold text-gray-900">Attention CRM</span>
             </a>
           </div>
           <div class="flex items-center space-x-4">
@@ -1930,7 +2133,7 @@ func renderContactDetailBody(
   function doSave(field, value){
     fetch(updateURL, {
       method: "POST",
-      headers: {"Content-Type":"application/json"},
+      headers: {"Content-Type":"application/json","X-CSRF-Token": (window.attentionCsrfToken ? window.attentionCsrfToken() : "")},
       body: JSON.stringify({field: field, value: value})
     }).then(function(res){
       if(!res.ok) throw new Error("bad status");
