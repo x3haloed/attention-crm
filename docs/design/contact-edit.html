@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FlowCRM — Contact Edit (Design Source of Truth)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: { extend: { fontFamily: { sans: ["Inter", "sans-serif"] } } },
+      };
+    </script>
+    <style>
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 font-sans">
+    <div id="app-container" class="min-h-screen bg-gray-50">
+      <header id="header" class="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
+        <div class="flex items-center justify-between max-w-4xl mx-auto">
+          <div class="flex items-center space-x-4">
+            <button
+              type="button"
+              class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+              aria-label="Back"
+            >
+              <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M10.828 12l4.95-4.95a1 1 0 1 0-1.414-1.414l-5.657 5.657a1 1 0 0 0 0 1.414l5.657 5.657a1 1 0 0 0 1.414-1.414L10.828 12z"
+                ></path>
+              </svg>
+            </button>
+
+            <div class="flex items-center space-x-3">
+              <h1 class="text-xl lg:text-2xl font-semibold text-gray-900">Sarah Chen</h1>
+              <span class="text-sm text-green-700 font-medium inline-flex items-center gap-1">
+                <svg viewBox="0 0 24 24" class="w-4 h-4 text-green-600" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm4.707-12.293-5 5a1 1 0 0 1-1.414 0l-2-2a1 1 0 1 1 1.414-1.414l1.293 1.293 4.293-4.293a1 1 0 1 1 1.414 1.414z"
+                  ></path>
+                </svg>
+                Saved
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+            aria-label="More"
+          >
+            <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+              <path
+                d="M12 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content" class="max-w-4xl mx-auto px-4 py-6 lg:px-6">
+        <section id="identity-card" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div class="space-y-5">
+            <div class="flex items-center gap-3">
+              <svg viewBox="0 0 24 24" class="w-5 h-5 text-gray-400" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5L4 8V6l8 5 8-5v2z"
+                ></path>
+              </svg>
+              <span class="text-gray-900">sarah.chen@acmecorp.com</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <svg viewBox="0 0 24 24" class="w-5 h-5 text-gray-400" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1-.24c1.12.37 2.33.57 3.59.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.07 21 3 13.93 3 5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.26.2 2.47.57 3.59a1 1 0 0 1-.24 1l-2.2 2.2z"
+                ></path>
+              </svg>
+              <span class="text-gray-900">+1 (555) 123-4567</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <svg viewBox="0 0 24 24" class="w-5 h-5 text-gray-400" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M3 21h18v-2H3v2zm2-4h14V3H5v14zm2-2V5h10v10H7z"
+                ></path>
+              </svg>
+              <span class="text-gray-900">Acme Corporation</span>
+            </div>
+
+            <button type="button" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+              + Add more
+            </button>
+          </div>
+        </section>
+
+        <section id="composer" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div class="flex items-center gap-3 mb-4">
+            <select
+              class="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option>Note</option>
+              <option>Call</option>
+              <option>Email</option>
+              <option>Meeting</option>
+            </select>
+            <div class="text-sm text-gray-500">What happened?</div>
+          </div>
+
+          <textarea
+            class="w-full min-h-24 rounded-xl border border-gray-200 p-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Discussed Q1 budget planning. Sarah mentioned they're looking to expand..."
+          ></textarea>
+
+          <div class="mt-4 flex items-center justify-between">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700 select-none">
+              <input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Set follow-up
+            </label>
+            <button
+              type="button"
+              class="h-10 px-5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700"
+            >
+              Log interaction
+            </button>
+          </div>
+        </section>
+
+        <section id="timeline" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <h2 class="text-sm font-semibold text-gray-900 mb-4">Timeline</h2>
+
+          <div class="space-y-4">
+            <div class="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                      Due
+                    </span>
+                    <div class="font-semibold text-gray-900 truncate">Follow up call with Sarah Chen</div>
+                  </div>
+                  <div class="mt-1 text-sm text-gray-600">Discuss implementation timeline and next steps</div>
+                  <div class="mt-2 text-xs text-gray-500">Due: Today at 2:00 PM</div>
+                </div>
+                <button type="button" class="text-sm font-medium text-blue-600 hover:text-blue-700">
+                  Mark complete
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-4">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-green-600">
+                  <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1-.24c1.12.37 2.33.57 3.59.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.07 21 3 13.93 3 5a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.26.2 2.47.57 3.59a1 1 0 0 1-.24 1l-2.2 2.2z"
+                    ></path>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="font-semibold text-gray-900 truncate">Called about Q1 budget planning</div>
+                    <div class="text-xs text-gray-500">2 hours ago</div>
+                  </div>
+                  <div class="mt-1 text-sm text-gray-600">
+                    Sarah mentioned they're looking to expand their team and need better project management tools. Very positive response to our enterprise
+                    features.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-4">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-blue-600">
+                  <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5L4 8V6l8 5 8-5v2z"></path>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="font-semibold text-gray-900 truncate">Sent proposal document</div>
+                    <div class="text-xs text-gray-500">Yesterday</div>
+                  </div>
+                  <div class="mt-1 text-sm text-gray-600">Enterprise package pricing and implementation timeline</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-4">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-purple-600">
+                  <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14v11z"
+                    ></path>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="font-semibold text-gray-900 truncate">Product demo meeting</div>
+                    <div class="text-xs text-gray-500">3 days ago</div>
+                  </div>
+                  <div class="mt-1 text-sm text-gray-600">Showed enterprise features, discussed team size and requirements</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-green-600">
+                  <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm4.707-12.293-5 5a1 1 0 0 1-1.414 0l-2-2a1 1 0 1 1 1.414-1.414l1.293 1.293 4.293-4.293a1 1 0 1 1 1.414 1.414z"
+                    ></path>
+                  </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="font-semibold text-gray-900 truncate">Initial discovery call</div>
+                    <div class="text-xs text-gray-500">1 week ago</div>
+                  </div>
+                  <div class="mt-1 text-sm text-gray-600">Learned about current pain points and growth plans</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

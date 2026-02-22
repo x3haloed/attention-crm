@@ -1,0 +1,14 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "/usr/local/go/bin/go build -o ./tmp/attention ./cmd/attention"
+  bin = "tmp/attention"
+  delay = 200
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "dist", "node_modules", ".attention", ".isnad", "web/static"]
+  exclude_regex = ["_test\\.go$"]
+
+[log]
+  time = true
+
