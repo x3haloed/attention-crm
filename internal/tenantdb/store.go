@@ -95,6 +95,14 @@ type Deal struct {
 	UpdatedAt         string
 }
 
+type DealPipelineRow struct {
+	Deal
+	PrimaryContactID      int64
+	PrimaryContactName    string
+	PrimaryContactCompany string
+	ContactCount          int
+}
+
 type DealEvent struct {
 	ID        int64
 	DealID    int64
@@ -615,6 +623,82 @@ LIMIT ?
 			return nil, err
 		}
 		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) ListDealsPipeline(limit int) ([]DealPipelineRow, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	cutoff := now.Add(48 * time.Hour).Format(time.RFC3339Nano)
+
+	rows, err := s.db.Query(`
+SELECT
+  d.id, d.title, d.state, d.value_cents, d.stage_label, d.next_step, d.next_step_due_at, d.next_step_completed_at,
+  d.close_window_start, d.close_window_end, d.closed_at, d.closed_outcome, d.last_activity_at, d.created_at, d.updated_at,
+  MIN(c.id) AS primary_contact_id,
+  MIN(c.name) AS primary_contact_name,
+  MIN(c.company) AS primary_contact_company,
+  COUNT(dc.contact_id) AS contact_count
+FROM deals d
+JOIN deal_contacts dc ON dc.deal_id = d.id
+JOIN contacts c ON c.id = dc.contact_id
+WHERE d.workspace_id = ?
+  AND d.state = 'open'
+GROUP BY d.id
+ORDER BY
+  CASE WHEN TRIM(COALESCE(d.next_step, '')) = '' THEN 0 ELSE 1 END ASC,
+  CASE
+    WHEN d.next_step_due_at IS NOT NULL AND d.next_step_due_at != '' AND d.next_step_completed_at IS NULL AND d.next_step_due_at <= ? THEN 0
+    ELSE 1
+  END ASC,
+  COALESCE(d.next_step_due_at, '') ASC,
+  d.last_activity_at DESC,
+  d.id DESC
+LIMIT ?
+`, workspaceID, cutoff, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []DealPipelineRow
+	for rows.Next() {
+		var row DealPipelineRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.Title,
+			&row.State,
+			&row.ValueCents,
+			&row.StageLabel,
+			&row.NextStep,
+			&row.NextStepDueAt,
+			&row.NextStepCompleted,
+			&row.CloseWindowStart,
+			&row.CloseWindowEnd,
+			&row.ClosedAt,
+			&row.ClosedOutcome,
+			&row.LastActivityAt,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+			&row.PrimaryContactID,
+			&row.PrimaryContactName,
+			&row.PrimaryContactCompany,
+			&row.ContactCount,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -84,6 +84,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleQuickCreateContact(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/deals/quick":
 		s.handleQuickCreateDeal(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/deals":
+		s.handleDealsPipeline(w, r, tenant)
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/contacts/"):
 		s.handleContactDetail(w, r, tenant, rest)
 	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/contacts/") && strings.HasSuffix(rest, "/update"):

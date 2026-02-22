@@ -844,7 +844,10 @@ func renderTenantAppBody(
 			if len(needsAttention) > 0 {
 				b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100"></div>`)
 			}
-			b.WriteString(`<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Deals</div>`)
+			b.WriteString(`<div class="flex items-center justify-between mb-3">`)
+			b.WriteString(`<div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Deals</div>`)
+			b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals" class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View all</a>`)
+			b.WriteString(`</div>`)
 			b.WriteString(`<div class="space-y-3">`)
 			for _, d := range needsDeals {
 				title := strings.TrimSpace(d.Title)
