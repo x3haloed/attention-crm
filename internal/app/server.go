@@ -261,6 +261,24 @@ func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+func requireSameOrigin(w http.ResponseWriter, r *http.Request) bool {
+	// For pre-auth flows (like initial setup) we can't rely on a per-session CSRF token.
+	// Instead, enforce same-origin using browser-provided headers.
+	if sfs := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); sfs == "same-origin" || sfs == "same-site" {
+		return true
+	}
+	ref := r.Header.Get("Origin")
+	if ref == "" {
+		ref = r.Header.Get("Referer")
+	}
+	u, err := url.Parse(ref)
+	if err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host) {
+		return true
+	}
+	http.Error(w, "forbidden", http.StatusForbidden)
+	return false
+}
+
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(web.StaticFS, "static")
@@ -316,6 +334,9 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request) {
 	if !s.allowRate(r, "setup_passkey_start", 0.5, 5) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+	if !requireSameOrigin(w, r) {
 		return
 	}
 	if err := parseMaybeMultipartForm(r); err != nil {
@@ -392,6 +413,9 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request) {
 	if !s.allowRate(r, "setup_passkey_finish", 0.5, 5) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+	if !requireSameOrigin(w, r) {
 		return
 	}
 	flowID := strings.TrimSpace(r.URL.Query().Get("flow_id"))
@@ -488,6 +512,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleCreateInteractionFromContact(w, r, tenant, rest)
 	case r.Method == http.MethodPost && rest == "/interactions":
 		s.handleCreateInteraction(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/interactions/quick":
+		s.handleQuickCreateInteraction(w, r, tenant)
 	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/interactions/") && strings.HasSuffix(rest, "/complete"):
 		s.handleCompleteInteraction(w, r, tenant, rest)
 	case r.Method == http.MethodPost && rest == "/universal":
@@ -618,6 +644,20 @@ type omniContact struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+func inferInteractionTypeFromText(q string) string {
+	t := strings.ToLower(strings.TrimSpace(q))
+	switch {
+	case strings.HasPrefix(t, "call ") || strings.Contains(t, " call "):
+		return "call"
+	case strings.HasPrefix(t, "email ") || strings.Contains(t, " email "):
+		return "email"
+	case strings.HasPrefix(t, "meet ") || strings.Contains(t, " meet ") || strings.Contains(t, "meeting"):
+		return "meeting"
+	default:
+		return "note"
+	}
+}
+
 func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
@@ -660,6 +700,37 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 	}
 
 	actions := []map[string]any{}
+	if looksLikeNote(q) {
+		itype := inferInteractionTypeFromText(q)
+		dueLocal, hasDue := parseDueSuggestionLocal(q, time.Now())
+
+		candidates := matches
+		if len(candidates) == 0 {
+			// If we can't infer a contact from the note text, still offer one-shot logging
+			// against a few common contacts so the palette isn't empty.
+			if opts, err := db.ContactOptions(); err == nil && len(opts) > 0 {
+				candidates = opts
+			}
+		}
+
+		limit := 3
+		if len(candidates) < limit {
+			limit = len(candidates)
+		}
+		for i := 0; i < limit; i++ {
+			act := map[string]any{
+				"type":             "log_interaction",
+				"contact_id":       candidates[i].ID,
+				"contact_name":     candidates[i].Name,
+				"interaction_type": itype,
+				"content":          q,
+			}
+			if hasDue {
+				act["due_at"] = dueLocal
+			}
+			actions = append(actions, act)
+		}
+	}
 	if looksLikeContactName(q) {
 		actions = append(actions, map[string]any{
 			"type": "create_contact",
@@ -977,6 +1048,65 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, ten
 		return
 	}
 	s.handleApp(w, r, tenant, appViewState{Flash: "Contact created.", Duplicates: dups})
+}
+
+func (s *Server) handleQuickCreateInteraction(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	if err := parseMaybeMultipartForm(r); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	contactID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("contact_id")), 10, 64)
+	if err != nil || contactID <= 0 {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: contact is required."})
+		return
+	}
+	interactionType := strings.TrimSpace(r.FormValue("type"))
+	if interactionType == "" {
+		interactionType = "note"
+	}
+	content := strings.TrimSpace(r.FormValue("content"))
+	if content == "" {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: content is required."})
+		return
+	}
+
+	dueAtRaw := strings.TrimSpace(r.FormValue("due_at"))
+	var dueAt *time.Time
+	if dueAtRaw != "" {
+		parsed, parseErr := time.Parse("2006-01-02T15:04", dueAtRaw)
+		if parseErr != nil {
+			s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: due date format is invalid."})
+			return
+		}
+		dueAt = &parsed
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if _, err := db.ContactByID(contactID); err != nil {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: contact does not exist."})
+		return
+	}
+	if err := db.CreateInteraction(contactID, interactionType, content, dueAt); err != nil {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: " + err.Error()})
+		return
+	}
+
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/contacts/"+strconv.FormatInt(contactID, 10), http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
@@ -1921,6 +2051,27 @@ func renderTenantAppBody(
         '</div>';
         return;
       }
+      if(it.kind === "log_interaction"){
+        var rowClass3 = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClass3 = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        var label = 'Log ' + (it.interaction_type || 'note') + ' with ' + (it.contact_name || '');
+        var sub = (it.content || '').trim();
+        if(sub.length > 120) sub = sub.slice(0, 117) + '...';
+        html += '<div class="'+rowClass3+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">'+escHtml(label)+'</div>' +
+            '<div class="text-xs text-gray-500">'+escHtml(sub)+'</div>' +
+            (it.due_at ? '<div class="mt-1 text-xs text-blue-700">Due: '+escHtml(it.due_at)+'</div>' : '') +
+          '</div>' +
+          '<div class="text-xs text-purple-700 font-medium">Log</div>' +
+        '</div>';
+        return;
+      }
     });
     panel.innerHTML = html;
   }
@@ -1938,6 +2089,16 @@ func renderTenantAppBody(
       });
     });
     (result.actions || []).forEach(function(a){
+      if(a.type === "log_interaction"){
+        items.push({
+          kind: "log_interaction",
+          contact_id: a.contact_id,
+          contact_name: a.contact_name || "",
+          interaction_type: a.interaction_type || "note",
+          content: a.content || "",
+          due_at: a.due_at || ""
+        });
+      }
       if(a.type === "create_contact"){
         items.push({kind:"create_contact", name: a.name});
       }
@@ -1966,6 +2127,36 @@ func renderTenantAppBody(
       f.appendChild(inp);
       document.body.appendChild(f);
       f.submit();
+      return;
+    }
+    if(it.kind === "log_interaction"){
+      var f2 = document.createElement("form");
+      f2.method = "POST";
+      f2.action = "/t/" + tenantSlug + "/interactions/quick";
+      var i1 = document.createElement("input");
+      i1.type = "hidden";
+      i1.name = "contact_id";
+      i1.value = String(it.contact_id || "");
+      f2.appendChild(i1);
+      var i2 = document.createElement("input");
+      i2.type = "hidden";
+      i2.name = "type";
+      i2.value = String(it.interaction_type || "note");
+      f2.appendChild(i2);
+      var i3 = document.createElement("input");
+      i3.type = "hidden";
+      i3.name = "content";
+      i3.value = String(it.content || "");
+      f2.appendChild(i3);
+      if(it.due_at){
+        var i4 = document.createElement("input");
+        i4.type = "hidden";
+        i4.name = "due_at";
+        i4.value = String(it.due_at || "");
+        f2.appendChild(i4);
+      }
+      document.body.appendChild(f2);
+      f2.submit();
       return;
     }
   }
@@ -2673,6 +2864,11 @@ func looksLikeNote(input string) bool {
 	if t == "" {
 		return false
 	}
+	// If it's longer than a plausible "name" query, assume it's a note.
+	// This is intentionally biased toward "note" to avoid accidentally suggesting "Create contact: <sentence>".
+	if len(strings.Fields(t)) >= 4 {
+		return true
+	}
 	noteWords := []string{
 		"call ",
 		"email ",
@@ -2680,6 +2876,9 @@ func looksLikeNote(input string) bool {
 		"meeting ",
 		"follow up",
 		"follow-up",
+		"mentioned",
+		"discussed",
+		"said",
 		"remind",
 		"tomorrow",
 		"today",
@@ -2699,8 +2898,9 @@ func extractContactQueryFromNote(input string) string {
 	}
 	verbs := map[string]struct{}{
 		"call": {}, "email": {}, "meet": {}, "meeting": {}, "follow": {}, "up": {}, "with": {}, "remind": {}, "me": {},
+		"mentioned": {}, "discussed": {}, "said": {}, "about": {}, "regarding": {}, "re": {},
 	}
-	stop := map[string]struct{}{"tomorrow": {}, "today": {}}
+	stop := map[string]struct{}{"tomorrow": {}, "today": {}, "a": {}, "an": {}, "the": {}}
 
 	out := make([]string, 0, len(words))
 	for _, w := range words {
