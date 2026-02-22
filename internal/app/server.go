@@ -538,6 +538,16 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleUpdateContact(w, r, tenant, rest)
 	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/contacts/") && strings.HasSuffix(rest, "/interactions"):
 		s.handleCreateInteractionFromContact(w, r, tenant, rest)
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/deals/"):
+		s.handleDealDesk(w, r, tenant, rest)
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/deals/") && strings.HasSuffix(rest, "/next-step"):
+		s.handleDealUpdateNextStep(w, r, tenant, rest)
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/deals/") && strings.HasSuffix(rest, "/next-step/complete"):
+		s.handleDealCompleteNextStep(w, r, tenant, rest)
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/deals/") && strings.HasSuffix(rest, "/events"):
+		s.handleDealCreateEvent(w, r, tenant, rest)
+	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/deals/") && strings.HasSuffix(rest, "/close"):
+		s.handleDealClose(w, r, tenant, rest)
 	case r.Method == http.MethodPost && rest == "/interactions":
 		s.handleCreateInteraction(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/interactions/quick":
@@ -1718,6 +1728,195 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	dealID, ok := parseDealIDFromRest(rest)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	deal, contactIDs, err := db.DealByID(dealID)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	events, err := db.ListDealEvents(dealID, 200)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var targets []tenantdb.Contact
+	for _, cid := range contactIDs {
+		c, err := db.ContactByID(cid)
+		if err == nil {
+			targets = append(targets, c)
+		}
+	}
+
+	body := renderDealDeskBody(tenant, deal, targets, events, "")
+	csrf := s.ensureCSRFCookie(w, r)
+	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+		Title:     "Deal",
+		MainID:    "main-content",
+		MainClass: "max-w-4xl mx-auto px-4 py-6 lg:px-6",
+		Body:      body,
+		CSRFToken: csrf,
+	})
+}
+
+func (s *Server) handleDealUpdateNextStep(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	dealID, ok := parseDealIDFromRest(rest)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := parseMaybeMultipartForm(r); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	nextStep := strings.TrimSpace(r.FormValue("next_step"))
+	dueAtRaw := strings.TrimSpace(r.FormValue("due_at"))
+
+	var dueAt *time.Time
+	if dueAtRaw != "" {
+		parsed, parseErr := time.Parse("2006-01-02T15:04", dueAtRaw)
+		if parseErr != nil {
+			http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+			return
+		}
+		dueAt = &parsed
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if _, err := db.UpdateDealNextStep(dealID, nextStep, dueAt); err != nil {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+		return
+	}
+	_ = db.CreateDealEvent(dealID, "system", "Updated next step.")
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+}
+
+func (s *Server) handleDealCompleteNextStep(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	dealID, ok := parseDealIDFromRest(rest)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+	_, _ = db.CompleteDealNextStep(dealID)
+	_ = db.CreateDealEvent(dealID, "system", "Completed next step.")
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+}
+
+func (s *Server) handleDealCreateEvent(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	dealID, ok := parseDealIDFromRest(rest)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := parseMaybeMultipartForm(r); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	typ := strings.TrimSpace(r.FormValue("type"))
+	content := strings.TrimSpace(r.FormValue("content"))
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	_ = db.CreateDealEvent(dealID, typ, content)
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+}
+
+func (s *Server) handleDealClose(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	dealID, ok := parseDealIDFromRest(rest)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := parseMaybeMultipartForm(r); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	state := strings.TrimSpace(r.FormValue("state"))
+	outcome := strings.TrimSpace(r.FormValue("outcome"))
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if _, err := db.CloseDeal(dealID, state, outcome); err == nil {
+		_ = db.CreateDealEvent(dealID, "system", "Closed "+strings.ToUpper(state)+": "+outcome)
+	}
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
+}
+
 type session struct {
 	TenantSlug string
 	UserID     int64
@@ -1871,6 +2070,21 @@ func parseContactIDFromUpdateRest(rest string) (int64, bool) {
 		return 0, false
 	}
 	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func parseDealIDFromRest(rest string) (int64, bool) {
+	trimmed := strings.TrimPrefix(rest, "/deals/")
+	trimmed = strings.Trim(trimmed, "/")
+	if trimmed == "" {
+		return 0, false
+	}
+	parts := strings.Split(trimmed, "/")
+	idRaw := parts[0]
+	id, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil || id <= 0 {
 		return 0, false
 	}
@@ -2701,9 +2915,13 @@ func parseRFC3339(s string) (time.Time, bool) {
 	if s == "" {
 		return time.Time{}, false
 	}
-	t, err := time.Parse(time.RFC3339, s)
+	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return time.Time{}, false
+		t2, err2 := time.Parse(time.RFC3339, s)
+		if err2 != nil {
+			return time.Time{}, false
+		}
+		t = t2
 	}
 	return t, true
 }
@@ -3042,6 +3260,180 @@ func interactionIcon(interactionType, variant string) string {
 		color = "text-green-600"
 	}
 	return `<svg class="w-4 h-4 ` + color + `" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="` + path + `"></path></svg>`
+}
+
+func dealStateBadge(state string) string {
+	state = strings.ToLower(strings.TrimSpace(state))
+	label := strings.Title(state)
+	cls := "bg-gray-100 text-gray-800"
+	switch state {
+	case "open":
+		label = "Open"
+		cls = "bg-blue-50 text-blue-700"
+	case "won":
+		label = "Won"
+		cls = "bg-green-50 text-green-700"
+	case "lost":
+		label = "Lost"
+		cls = "bg-red-50 text-red-700"
+	}
+	return `<span class="text-xs font-medium rounded-full px-2 py-0.5 ` + cls + `">` + template.HTMLEscapeString(label) + `</span>`
+}
+
+func renderDealDeskBody(tenant control.Tenant, deal tenantdb.Deal, targets []tenantdb.Contact, events []tenantdb.DealEvent, flash string) template.HTML {
+	now := time.Now()
+	tenantSlugEsc := template.HTMLEscapeString(tenant.Slug)
+	var b strings.Builder
+
+	if flash != "" {
+		b.WriteString(`<div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">` + template.HTMLEscapeString(flash) + `</div>`)
+	}
+
+	// Header row
+	b.WriteString(`<div class="flex items-start justify-between gap-4 mb-6">`)
+	b.WriteString(`<div class="min-w-0">`)
+	b.WriteString(`<a href="/t/` + tenantSlugEsc + `/app" class="text-sm text-gray-600 hover:text-gray-900 hover:underline">← Back</a>`)
+	b.WriteString(`<div class="mt-2 flex items-center gap-3 flex-wrap">`)
+	b.WriteString(`<h1 class="text-2xl font-semibold text-gray-900 truncate">` + template.HTMLEscapeString(deal.Title) + `</h1>`)
+	b.WriteString(dealStateBadge(deal.State))
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="mt-1 text-xs text-gray-500">Last activity: ` + template.HTMLEscapeString(relativeTime(deal.LastActivityAt, now)) + `</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	// Targets
+	b.WriteString(`<div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">`)
+	b.WriteString(`<div class="text-sm font-semibold text-gray-900 mb-3">Targets</div>`)
+	if len(targets) == 0 {
+		b.WriteString(`<div class="text-sm text-gray-600">No targets attached.</div>`)
+	} else {
+		b.WriteString(`<div class="flex flex-wrap gap-2">`)
+		for _, c := range targets {
+			label := c.Name
+			if c.Company != "" {
+				label += " • " + c.Company
+			}
+			b.WriteString(`<a class="text-sm font-medium px-3 py-1.5 rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-900" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(c.ID, 10) + `">` + template.HTMLEscapeString(label) + `</a>`)
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</div>`)
+
+	// Next step
+	nextStepMissing := strings.TrimSpace(deal.NextStep) == ""
+	nextCardCls := "bg-white"
+	if nextStepMissing && strings.ToLower(strings.TrimSpace(deal.State)) == "open" {
+		nextCardCls = "bg-amber-50"
+	}
+	b.WriteString(`<div class="` + nextCardCls + ` rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">`)
+	b.WriteString(`<div class="flex items-start justify-between gap-4">`)
+	b.WriteString(`<div class="min-w-0">`)
+	b.WriteString(`<div class="text-sm font-semibold text-gray-900">Next step</div>`)
+	if nextStepMissing {
+		b.WriteString(`<div class="mt-1 text-sm text-amber-900">Missing next step. Add one to keep this deal moving.</div>`)
+	} else {
+		b.WriteString(`<div class="mt-1 text-sm font-medium text-gray-900">` + template.HTMLEscapeString(deal.NextStep) + `</div>`)
+		if deal.NextStepDueAt.Valid && !deal.NextStepCompleted.Valid {
+			b.WriteString(`<div class="mt-1 text-xs text-gray-600">Due: ` + template.HTMLEscapeString(dueDisplay(deal.NextStepDueAt.String, now)) + `</div>`)
+		}
+		if deal.NextStepCompleted.Valid {
+			b.WriteString(`<div class="mt-1 text-xs text-green-700">Completed</div>`)
+		}
+	}
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="flex items-center gap-2">`)
+	if !nextStepMissing && !deal.NextStepCompleted.Valid && strings.ToLower(strings.TrimSpace(deal.State)) == "open" {
+		b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(deal.ID, 10) + `/next-step/complete">`)
+		b.WriteString(`<button type="submit" class="h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Mark done</button>`)
+		b.WriteString(`</form>`)
+	}
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	if strings.ToLower(strings.TrimSpace(deal.State)) == "open" {
+		b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(deal.ID, 10) + `/next-step" class="mt-4">`)
+		b.WriteString(`<label class="block text-sm font-medium text-gray-700">What’s the next step?</label>`)
+		b.WriteString(`<input name="next_step" type="text" value="` + template.HTMLEscapeString(deal.NextStep) + `" class="mt-1 block w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Send proposal" />`)
+		b.WriteString(`<label class="block text-sm font-medium text-gray-700 mt-3">Due (optional)</label>`)
+		b.WriteString(`<input name="due_at" type="datetime-local" class="mt-1 block w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />`)
+		b.WriteString(`<div class="mt-4 flex justify-end">`)
+		b.WriteString(`<button type="submit" class="h-10 px-5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700">Save next step</button>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</form>`)
+	}
+	b.WriteString(`</div>`)
+
+	// Timeline + quick log
+	b.WriteString(`<div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">`)
+	b.WriteString(`<div class="flex items-center justify-between mb-4">`)
+	b.WriteString(`<div class="text-sm font-semibold text-gray-900">Timeline</div>`)
+	b.WriteString(`</div>`)
+
+	if strings.ToLower(strings.TrimSpace(deal.State)) == "open" {
+		b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(deal.ID, 10) + `/events" class="mb-6">`)
+		b.WriteString(`<div class="flex items-center gap-3">`)
+		b.WriteString(`<select name="type" class="h-10 bg-white border border-gray-200 rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">`)
+		for _, t := range []string{"note", "call", "email", "meeting"} {
+			b.WriteString(`<option value="` + template.HTMLEscapeString(t) + `">` + template.HTMLEscapeString(strings.Title(t)) + `</option>`)
+		}
+		b.WriteString(`</select>`)
+		b.WriteString(`<input name="content" type="text" class="flex-1 h-10 bg-white border border-gray-200 rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="What happened? Quick note, call summary, or next steps…" />`)
+		b.WriteString(`<button type="submit" class="h-10 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-black">Log</button>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</form>`)
+	}
+
+	if len(events) == 0 {
+		b.WriteString(`<div class="text-sm text-gray-600">No timeline events yet.</div>`)
+	} else {
+		b.WriteString(`<div class="space-y-3">`)
+		for _, ev := range events {
+			evType := strings.ToLower(strings.TrimSpace(ev.Type))
+			icon := interactionIcon(evType, "")
+			label := strings.Title(evType)
+			if evType == "system" {
+				icon = `<svg class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 11H7v-2h6V7h2v6Z"/></svg>`
+				label = "System"
+			}
+			b.WriteString(`<div class="flex items-start gap-3 p-3 rounded-xl border border-gray-200">`)
+			b.WriteString(`<div class="mt-0.5">` + icon + `</div>`)
+			b.WriteString(`<div class="min-w-0 flex-1">`)
+			b.WriteString(`<div class="flex items-center justify-between gap-3">`)
+			b.WriteString(`<div class="text-sm font-medium text-gray-900">` + template.HTMLEscapeString(label) + `</div>`)
+			b.WriteString(`<div class="text-xs text-gray-500">` + template.HTMLEscapeString(relativeTime(ev.CreatedAt, now)) + `</div>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`<div class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">` + template.HTMLEscapeString(ev.Content) + `</div>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`</div>`)
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</div>`)
+
+	// Close outcome (lightweight, but better than hidden defaults)
+	if strings.ToLower(strings.TrimSpace(deal.State)) == "open" {
+		b.WriteString(`<div class="mt-6 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">`)
+		b.WriteString(`<div class="text-sm font-semibold text-gray-900 mb-3">Close</div>`)
+		b.WriteString(`<div class="text-sm text-gray-600 mb-4">One sentence: what happened?</div>`)
+		b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(deal.ID, 10) + `/close" class="space-y-3">`)
+		b.WriteString(`<textarea name="outcome" rows="2" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g. Signed annual contract after security review"></textarea>`)
+		b.WriteString(`<div class="flex items-center gap-2 justify-end">`)
+		b.WriteString(`<button name="state" value="lost" type="submit" class="h-10 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-black">Lost</button>`)
+		b.WriteString(`<button name="state" value="won" type="submit" class="h-10 px-4 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700">Won</button>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</form>`)
+		b.WriteString(`</div>`)
+	} else {
+		if deal.ClosedAt.Valid {
+			b.WriteString(`<div class="mt-6 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">`)
+			b.WriteString(`<div class="text-sm font-semibold text-gray-900 mb-2">Closed</div>`)
+			b.WriteString(`<div class="text-sm text-gray-700">` + template.HTMLEscapeString(deal.ClosedOutcome) + `</div>`)
+			b.WriteString(`<div class="text-xs text-gray-500 mt-1">` + template.HTMLEscapeString(relativeTime(deal.ClosedAt.String, now)) + `</div>`)
+			b.WriteString(`</div>`)
+		}
+	}
+
+	return template.HTML(b.String())
 }
 
 func looksLikeContactName(input string) bool {
