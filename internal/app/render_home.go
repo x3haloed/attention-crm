@@ -98,10 +98,17 @@ func renderTenantAppBody(
     return "";
   }
 
+  function firstTarget(){
+    for(var i=0;i<chips.length;i++){
+      if(chips[i].kind === "target" && chips[i].id) return chips[i];
+    }
+    return null;
+  }
+
   function setIntentChip(intent){
     intent = String(intent || "").trim().toLowerCase();
     if(intent === "meet") intent = "meeting";
-    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting" && intent !== "deal") return;
+    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting" && intent !== "deal" && intent !== "contact") return;
 
     // Remove any existing intent chip, then add as the left-most chip.
     chips = chips.filter(function(c){ return c.kind !== "intent"; });
@@ -115,7 +122,7 @@ func renderTenantAppBody(
 
   function maybeCommitIntentFromInput(){
     var v = String(input.value || "");
-    var m = v.match(/^\\s*(note|call|email|meeting|meet|deal)\\s*:\\s*/i);
+    var m = v.match(/^\\s*(note|call|email|meeting|meet|deal|contact)\\s*:\\s*/i);
     if(!m) return false;
     setIntentChip(m[1]);
     input.value = v.slice(m[0].length);
@@ -130,6 +137,8 @@ func renderTenantAppBody(
     chips.push({
       kind: "target",
       id: contact.id,
+      name: contact.name || "",
+      company: contact.company || "",
       label: label,
       href: "/t/" + tenantSlug + "/contacts/" + contact.id
     });
@@ -246,6 +255,26 @@ func renderTenantAppBody(
         '</div>';
         return;
       }
+      if(it.kind === "pick_target"){
+        var rowClass4b = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClass4b = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        var label2b = 'Pick contact…';
+        var sub2b = (it.content || '').trim();
+        if(sub2b.length > 120) sub2b = sub2b.slice(0, 117) + '...';
+        html += '<div class="'+rowClass4b+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">'+escHtml(label2b)+'</div>' +
+            (sub2b ? '<div class="text-xs text-gray-500">'+escHtml(sub2b)+'</div>' : '<div class="text-xs text-gray-500">Choose who this is about</div>') +
+          '</div>' +
+          '<div class="text-xs text-gray-900 font-medium">Choose</div>' +
+        '</div>';
+        return;
+      }
       if(it.kind === "create_deal"){
         var rowClass5 = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
         if(idx === selected){
@@ -354,9 +383,34 @@ func renderTenantAppBody(
       items = buildContactItems(result || {});
     }
 
+    var intentNow = getIntent();
+    var target = firstTarget();
+    var qNow = String(input.value || "").trim();
+
+    // Note/call/email/meeting: allow explicit target selection even if the query isn't note-like.
+    if(!pickMode && (intentNow === "note" || intentNow === "call" || intentNow === "email" || intentNow === "meeting") && !target){
+      items.push({kind:"pick_target", content: qNow});
+    }
+
+    // If a target is selected for note/call/email/meeting, prefer a single primary "log" action for that target.
+    if(!pickMode && target && (intentNow === "note" || intentNow === "call" || intentNow === "email" || intentNow === "meeting")){
+      items = items.filter(function(it){ return it.kind !== "log_interaction" && it.kind !== "pick_entity"; });
+      if(qNow !== ""){
+        items.unshift({
+          kind: "log_interaction",
+          contact_id: target.id,
+          contact_name: target.name || "",
+          interaction_type: intentNow,
+          content: qNow,
+          due_at: ""
+        });
+      }
+      items.push({kind:"pick_entity", action:"log_interaction", interaction_type:intentNow, content:qNow, due_at:""});
+    }
+
     // Local-only: deal mode rows are derived from chip state.
-    if(!pickMode && getIntent() === "deal"){
-      var title = String(input.value || "").trim();
+    if(!pickMode && intentNow === "deal"){
+      var title = qNow;
       items.push({
         kind: "create_deal",
         title: title,
@@ -364,6 +418,13 @@ func renderTenantAppBody(
       });
       if(firstTargetID() === ""){
         items.push({kind:"pick_entity", action:"create_deal", content:title});
+      }
+    }
+    // Local-only: contact mode always offers create contact from typed text.
+    if(!pickMode && intentNow === "contact"){
+      var cname = qNow;
+      if(cname !== ""){
+        items.push({kind:"create_contact", name: cname});
       }
     }
     selected = 0;
@@ -392,6 +453,17 @@ func renderTenantAppBody(
           fDeal.appendChild(dc2);
           document.body.appendChild(fDeal);
           fDeal.submit();
+          return;
+        }
+        if(pickPayload.action === "set_target"){
+          addTargetChip({id: it.id, name: it.name, company: it.company});
+          input.value = "";
+          setOpen(false);
+          pickMode = false;
+          pickPayload = null;
+          items = [];
+          panel.innerHTML = "";
+          input.focus();
           return;
         }
         var fPick = document.createElement("form");
@@ -487,6 +559,15 @@ func renderTenantAppBody(
       render();
       return;
     }
+    if(it.kind === "pick_target"){
+      pickMode = true;
+      pickPayload = {action: "set_target"};
+      items = buildContactItems(lastResult || {});
+      selected = 0;
+      setOpen(items.length > 0);
+      render();
+      return;
+    }
     if(it.kind === "create_deal"){
       var title = String(it.title || input.value || "").trim();
       if(title === "") return;
@@ -537,7 +618,7 @@ func renderTenantAppBody(
   input.addEventListener("keydown", function(e){
     if(e.key === ":"){
       var tok = String(input.value || "").trim().toLowerCase();
-      if(tok === "note" || tok === "call" || tok === "email" || tok === "meeting" || tok === "meet" || tok === "deal"){
+      if(tok === "note" || tok === "call" || tok === "email" || tok === "meeting" || tok === "meet" || tok === "deal" || tok === "contact"){
         e.preventDefault();
         setIntentChip(tok);
         input.value = "";
@@ -623,6 +704,22 @@ func renderTenantAppBody(
   // Ensure chips render at least once.
   renderChips();
 
+  // Quick-capture buttons: focus omnibar and set intent chip.
+  document.querySelectorAll("[data-omni-intent]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.preventDefault();
+      var intent = String(btn.getAttribute("data-omni-intent") || "");
+      if(intent){ setIntentChip(intent); }
+      input.value = "";
+      setOpen(false);
+      panel.innerHTML = "";
+      items = [];
+      pickMode = false;
+      pickPayload = null;
+      input.focus();
+    });
+  });
+
   document.addEventListener("click", function(e){
     var chipBtn = e.target && e.target.closest ? e.target.closest("[data-chip-idx]") : null;
     if(chipBtn){
@@ -666,10 +763,10 @@ func renderTenantAppBody(
 
 	// Quick capture section.
 	b.WriteString(`<div id="quick-capture-section" class="mt-6"><div class="grid grid-cols-4 gap-4">`)
-	b.WriteString(quickCaptureButton("New Contact", "Add person or company", "hover:border-blue-300 hover:bg-blue-50", "bg-blue-100", "group-hover:bg-blue-200", "text-blue-600", "M12 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 14c0-3.314 2.686-6 6-6h2c3.314 0 6 2.686 6 6v1H5v-1Zm13-6v-2h2V9h-2V7h-2v2h-2v2h2v2h2Z"))
-	b.WriteString(quickCaptureButton("Log Call", "Record conversation", "hover:border-green-300 hover:bg-green-50", "bg-green-100", "group-hover:bg-green-200", "text-green-600", "M6.62 10.79a15.053 15.053 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.59a1 1 0 0 1-.24 1.01l-2.21 2.19Z"))
-	b.WriteString(quickCaptureButton("Quick Note", "Capture thoughts", "hover:border-yellow-300 hover:bg-yellow-50", "bg-yellow-100", "group-hover:bg-yellow-200", "text-yellow-600", "M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5Z"))
-	b.WriteString(quickCaptureButton("New Deal", "Track opportunity", "hover:border-purple-300 hover:bg-purple-50", "bg-purple-100", "group-hover:bg-purple-200", "text-purple-600", "M20 6h-3.586l-1.707-1.707A1 1 0 0 0 14 4H10a1 1 0 0 0-.707.293L7.586 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm0 12H4V8h4l2-2h4l2 2h4v10Z"))
+	b.WriteString(quickCaptureButton("New Contact", "Add person or company", "hover:border-blue-300 hover:bg-blue-50", "bg-blue-100", "group-hover:bg-blue-200", "text-blue-600", "M12 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 14c0-3.314 2.686-6 6-6h2c3.314 0 6 2.686 6 6v1H5v-1Zm13-6v-2h2V9h-2V7h-2v2h-2v2h2v2h2Z", "contact"))
+	b.WriteString(quickCaptureButton("Log Call", "Record conversation", "hover:border-green-300 hover:bg-green-50", "bg-green-100", "group-hover:bg-green-200", "text-green-600", "M6.62 10.79a15.053 15.053 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.59a1 1 0 0 1-.24 1.01l-2.21 2.19Z", "call"))
+	b.WriteString(quickCaptureButton("Quick Note", "Capture thoughts", "hover:border-yellow-300 hover:bg-yellow-50", "bg-yellow-100", "group-hover:bg-yellow-200", "text-yellow-600", "M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5Z", "note"))
+	b.WriteString(quickCaptureButton("New Deal", "Track opportunity", "hover:border-purple-300 hover:bg-purple-50", "bg-purple-100", "group-hover:bg-purple-200", "text-purple-600", "M20 6h-3.586l-1.707-1.707A1 1 0 0 0 14 4H10a1 1 0 0 0-.707.293L7.586 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm0 12H4V8h4l2-2h4l2 2h4v10Z", "deal"))
 	b.WriteString(`</div></div>`)
 
 	b.WriteString(`<div class="grid grid-cols-12 gap-6 mt-6" id="content-grid">`)

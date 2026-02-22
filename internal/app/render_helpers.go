@@ -8,18 +8,22 @@ import (
 	"time"
 )
 
-func quickCaptureButton(title, subtitle, hoverClass, iconBgClass, iconBgHoverClass, iconClass, iconPath string) string {
-	return `<button type="button" class="bg-white border border-gray-200 rounded-xl p-6 ` + hoverClass + ` transition-all duration-200 group">
-  <div class="flex flex-col items-center text-center space-y-3">
-    <div class="w-12 h-12 ` + iconBgClass + ` rounded-full flex items-center justify-center ` + iconBgHoverClass + `">
-      <svg class="w-5 h-5 ` + iconClass + `" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="` + iconPath + `"></path></svg>
-    </div>
-    <div>
-      <p class="text-sm font-medium text-gray-900">` + template.HTMLEscapeString(title) + `</p>
-      <p class="text-xs text-gray-500 mt-1">` + template.HTMLEscapeString(subtitle) + `</p>
-    </div>
-  </div>
-</button>`
+func quickCaptureButton(title, subtitle, hoverClass, iconBgClass, iconBgHoverClass, iconClass, iconPath, intent string) string {
+	intentAttr := ""
+	if strings.TrimSpace(intent) != "" {
+		intentAttr = ` data-omni-intent="` + template.HTMLEscapeString(strings.TrimSpace(intent)) + `"`
+	}
+	return `<button type="button"` + intentAttr + ` class="bg-white border border-gray-200 rounded-xl p-6 ` + hoverClass + ` transition-all duration-200 group">
+	  <div class="flex flex-col items-center text-center space-y-3">
+	    <div class="w-12 h-12 ` + iconBgClass + ` rounded-full flex items-center justify-center ` + iconBgHoverClass + `">
+	      <svg class="w-5 h-5 ` + iconClass + `" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="` + iconPath + `"></path></svg>
+	    </div>
+	    <div>
+	      <p class="text-sm font-medium text-gray-900">` + template.HTMLEscapeString(title) + `</p>
+	      <p class="text-xs text-gray-500 mt-1">` + template.HTMLEscapeString(subtitle) + `</p>
+	    </div>
+	  </div>
+	</button>`
 }
 
 func initials(name string) string {
