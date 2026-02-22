@@ -182,3 +182,104 @@ func TestUpdateContactFieldTouchesUpdatedAt(t *testing.T) {
 		t.Fatalf("expected updated_at to change, got %q", after.UpdatedAt)
 	}
 }
+
+func TestDealsCRUDNextStepCloseAndEvents(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "tenant.sqlite")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.CreateInitialUser("Acme", "owner@example.com", "Owner", "passwordpassword"); err != nil {
+		t.Fatalf("CreateInitialUser: %v", err)
+	}
+	if err := store.CreateContact("Bob Smith", "bob@example.com", "", "Acme", ""); err != nil {
+		t.Fatalf("CreateContact: %v", err)
+	}
+	contacts, err := store.SearchContacts("Bob", 10)
+	if err != nil || len(contacts) != 1 {
+		t.Fatalf("SearchContacts: err=%v len=%d", err, len(contacts))
+	}
+	contactID := contacts[0].ID
+
+	if _, err := store.CreateDeal("New deal", nil); err == nil {
+		t.Fatalf("expected CreateDeal to require at least one contact")
+	}
+
+	dealID, err := store.CreateDeal("Website redesign", []int64{contactID})
+	if err != nil {
+		t.Fatalf("CreateDeal: %v", err)
+	}
+
+	deal, dealContacts, err := store.DealByID(dealID)
+	if err != nil {
+		t.Fatalf("DealByID: %v", err)
+	}
+	if deal.Title != "Website redesign" || deal.State != "open" {
+		t.Fatalf("unexpected deal: %+v", deal)
+	}
+	if len(dealContacts) != 1 || dealContacts[0] != contactID {
+		t.Fatalf("unexpected deal contacts: %+v", dealContacts)
+	}
+
+	due := time.Now().Add(4 * time.Hour)
+	if _, err := store.UpdateDealNextStep(dealID, "Send proposal", &due); err != nil {
+		t.Fatalf("UpdateDealNextStep: %v", err)
+	}
+	afterNext, _, err := store.DealByID(dealID)
+	if err != nil {
+		t.Fatalf("DealByID after next step: %v", err)
+	}
+	if afterNext.NextStep != "Send proposal" || !afterNext.NextStepDueAt.Valid {
+		t.Fatalf("unexpected next step state: %+v", afterNext)
+	}
+
+	if _, err := store.CompleteDealNextStep(dealID); err != nil {
+		t.Fatalf("CompleteDealNextStep: %v", err)
+	}
+	afterComplete, _, err := store.DealByID(dealID)
+	if err != nil {
+		t.Fatalf("DealByID after complete: %v", err)
+	}
+	if !afterComplete.NextStepCompleted.Valid {
+		t.Fatalf("expected next_step_completed_at to be set")
+	}
+
+	// Seed last_activity_at so we can verify events bump it.
+	if _, err := store.db.Exec(`UPDATE deals SET last_activity_at = '2000-01-01T00:00:00Z' WHERE id = ?`, dealID); err != nil {
+		t.Fatalf("seed last_activity_at: %v", err)
+	}
+	if err := store.CreateDealEvent(dealID, "note", "Talked budget"); err != nil {
+		t.Fatalf("CreateDealEvent: %v", err)
+	}
+	afterEvent, _, err := store.DealByID(dealID)
+	if err != nil {
+		t.Fatalf("DealByID after event: %v", err)
+	}
+	if afterEvent.LastActivityAt == "2000-01-01T00:00:00Z" {
+		t.Fatalf("expected last_activity_at to change")
+	}
+	events, err := store.ListDealEvents(dealID, 10)
+	if err != nil || len(events) == 0 {
+		t.Fatalf("ListDealEvents: err=%v len=%d", err, len(events))
+	}
+
+	if _, err := store.CloseDeal(dealID, "won", "Signed the contract"); err != nil {
+		t.Fatalf("CloseDeal: %v", err)
+	}
+	closed, _, err := store.DealByID(dealID)
+	if err != nil {
+		t.Fatalf("DealByID after close: %v", err)
+	}
+	if closed.State != "won" || !closed.ClosedAt.Valid || closed.ClosedOutcome != "Signed the contract" {
+		t.Fatalf("unexpected closed deal: %+v", closed)
+	}
+
+	listByContact, err := store.ListDealsByContact(contactID, 10)
+	if err != nil || len(listByContact) == 0 {
+		t.Fatalf("ListDealsByContact: err=%v len=%d", err, len(listByContact))
+	}
+}
