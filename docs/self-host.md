@@ -13,6 +13,14 @@ This app is designed to run as a single Go binary with SQLite on disk.
 Run the app on localhost and terminate TLS at a reverse proxy (Caddy/Nginx).
 The app uses `X-Forwarded-Proto: https` to decide whether to set `Secure` cookies.
 
+### Forwarded client IPs (rate limiting)
+
+If you run behind a reverse proxy, configure trusted proxy CIDRs so rate limiting keys off the real client IP
+instead of the proxy’s IP:
+
+- `ATTENTION_TRUSTED_PROXY_CIDRS` is a comma-separated list of CIDRs (e.g. `127.0.0.1/32,::1/128`).
+- Only requests whose `RemoteAddr` is in one of these CIDRs will honor `X-Forwarded-For` / `X-Real-IP`.
+
 ### Example: Caddy
 
 ```caddyfile
@@ -63,4 +71,3 @@ ATTENTION_WEBAUTHN_ORIGINS=https://crm.example.com \
 - Tenant DBs: `<data_dir>/tenants/<tenant_slug>.sqlite`
 
 Back up the whole `ATTENTION_DATA_DIR` directory (while the app is stopped, or using filesystem snapshots).
-

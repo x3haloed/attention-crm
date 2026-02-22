@@ -1,9 +1,48 @@
 package app
 
 import (
+	"net/http/httptest"
+	"net/netip"
 	"testing"
 	"time"
 )
+
+func TestClientIPTrustedProxy(t *testing.T) {
+	s := &Server{cfg: Config{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}}}
+
+	r := httptest.NewRequest("GET", "http://example.test/t/acme/app", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9, 127.0.0.1")
+
+	if got := s.clientIP(r); got != "203.0.113.9" {
+		t.Fatalf("clientIP trusted proxy got %q want %q", got, "203.0.113.9")
+	}
+}
+
+func TestClientIPUntrustedProxyIgnoresForwarded(t *testing.T) {
+	s := &Server{cfg: Config{TrustedProxies: nil}}
+
+	r := httptest.NewRequest("GET", "http://example.test/t/acme/app", nil)
+	r.RemoteAddr = "198.51.100.10:5678"
+	r.Header.Set("X-Forwarded-For", "203.0.113.9")
+
+	if got := s.clientIP(r); got != "198.51.100.10" {
+		t.Fatalf("clientIP untrusted got %q want %q", got, "198.51.100.10")
+	}
+}
+
+func TestClientIPTrustedProxyFallsBackRemoteOnBadForwarded(t *testing.T) {
+	s := &Server{cfg: Config{TrustedProxies: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}}}
+
+	r := httptest.NewRequest("GET", "http://example.test/t/acme/app", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
+	r.Header.Set("X-Forwarded-For", "not-an-ip")
+	r.Header.Set("X-Real-IP", "also-bad")
+
+	if got := s.clientIP(r); got != "127.0.0.1" {
+		t.Fatalf("clientIP bad forwarded got %q want %q", got, "127.0.0.1")
+	}
+}
 
 func TestLooksLikeContactName(t *testing.T) {
 	tests := []struct {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ type Config struct {
 	WebAuthnName    string
 	WebAuthnOrigins []string
 	DevNoAuth       bool
+	TrustedProxies  []netip.Prefix
 }
 
 func ConfigFromEnv() Config {
@@ -51,6 +53,20 @@ func ConfigFromEnv() Config {
 	}
 
 	devNoAuth := os.Getenv("ATTENTION_DEV_NOAUTH")
+	trustedProxiesEnv := os.Getenv("ATTENTION_TRUSTED_PROXY_CIDRS")
+	var trustedProxies []netip.Prefix
+	if trustedProxiesEnv != "" {
+		for _, part := range strings.Split(trustedProxiesEnv, ",") {
+			p := strings.TrimSpace(part)
+			if p == "" {
+				continue
+			}
+			pfx, err := netip.ParsePrefix(p)
+			if err == nil {
+				trustedProxies = append(trustedProxies, pfx)
+			}
+		}
+	}
 
 	return Config{
 		ListenAddr:      listen,
@@ -59,5 +75,6 @@ func ConfigFromEnv() Config {
 		WebAuthnName:    rpName,
 		WebAuthnOrigins: origins,
 		DevNoAuth:       devNoAuth == "1" || strings.EqualFold(devNoAuth, "true"),
+		TrustedProxies:  trustedProxies,
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -106,22 +107,49 @@ func isSecureRequest(r *http.Request) bool {
 	return false
 }
 
-func clientIP(r *http.Request) string {
+func (s *Server) clientIP(r *http.Request) string {
+	remote := r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		remote = host
+	}
+
+	remoteAddr, err := netip.ParseAddr(remote)
+	if err != nil {
+		return remote
+	}
+
+	trusted := false
+	for _, pfx := range s.cfg.TrustedProxies {
+		if pfx.Contains(remoteAddr) {
+			trusted = true
+			break
+		}
+	}
+	if !trusted {
+		return remote
+	}
+
+	// If we're behind a trusted proxy, honor forwarded client IP headers.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		first := strings.TrimSpace(strings.Split(xff, ",")[0])
 		if first != "" {
-			return first
+			if ip, err := netip.ParseAddr(first); err == nil {
+				return ip.String()
+			}
 		}
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && host != "" {
-		return host
+	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		if ip, err := netip.ParseAddr(xrip); err == nil {
+			return ip.String()
+		}
 	}
-	return r.RemoteAddr
+
+	return remote
 }
 
 func (s *Server) allowRate(r *http.Request, bucket string, perSecond float64, burst int) bool {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	key := bucket + "|" + ip
 
 	s.limMu.Lock()
