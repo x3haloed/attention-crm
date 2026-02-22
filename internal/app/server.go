@@ -407,6 +407,10 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleLoginPasskeyStart(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/login/passkey/finish":
 		s.handleLoginPasskeyFinish(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/login/passkey/discoverable/start":
+		s.handleLoginPasskeyDiscoverableStart(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/login/passkey/discoverable/finish":
+		s.handleLoginPasskeyDiscoverableFinish(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/logout":
 		s.handleLogout(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/omni":
@@ -627,6 +631,102 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"flow_id": flowID,
 		"options": options,
+	})
+}
+
+func parseWebAuthnUserHandle(userHandle []byte) (int64, bool) {
+	s := string(userHandle)
+	if !strings.HasPrefix(s, "user:") {
+		return 0, false
+	}
+	idRaw := strings.TrimSpace(strings.TrimPrefix(s, "user:"))
+	id, err := strconv.ParseInt(idRaw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func (s *Server) handleLoginPasskeyDiscoverableStart(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	if !s.allowRate(r, "login_passkey_discoverable_start|"+tenant.Slug, 1, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+
+	options, sessionData, err := s.webauthn.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
+	if err != nil {
+		http.Error(w, "could not start login: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	flowID := s.storeFlow(ceremonyFlow{
+		TenantSlug: tenant.Slug,
+		UserID:     0,
+		Session:    *sessionData,
+		ExpiresAt:  time.Now().UTC().Add(10 * time.Minute),
+	})
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"flow_id": flowID,
+		"options": options,
+	})
+}
+
+func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	if !s.allowRate(r, "login_passkey_discoverable_finish|"+tenant.Slug, 1, 10) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+
+	flowID := strings.TrimSpace(r.URL.Query().Get("flow_id"))
+	if flowID == "" {
+		http.Error(w, "missing flow_id", http.StatusBadRequest)
+		return
+	}
+	flow, ok := s.consumeFlow(flowID)
+	if !ok || flow.TenantSlug != tenant.Slug {
+		http.Error(w, "invalid or expired flow", http.StatusBadRequest)
+		return
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
+		userID, ok := parseWebAuthnUserHandle(userHandle)
+		if !ok {
+			return nil, errors.New("invalid user handle")
+		}
+		u, err := db.WebAuthnUserByID(userID)
+		if err != nil {
+			return nil, err
+		}
+		if len(u.Credentials) == 0 {
+			return nil, errors.New("no passkey enrolled for user")
+		}
+		return u, nil
+	}
+
+	u, _, err := s.webauthn.FinishPasskeyLogin(handler, flow.Session, r)
+	if err != nil {
+		http.Error(w, "passkey assertion failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	typed, ok := u.(tenantdb.WebAuthnUser)
+	if !ok {
+		http.Error(w, "could not resolve user", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: typed.ID}); err != nil {
+		http.Error(w, "set session failed", http.StatusInternalServerError)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"redirect": "/t/" + tenant.Slug + "/app",
 	})
 }
 
@@ -2428,7 +2528,8 @@ func setupFormHTML(errText, defaultWorkspace string) template.HTML {
     }
   });
 })();
-</script>`)
+</script>
+</div>`)
 }
 
 func loginFormHTML(slug, errText string) template.HTML {
@@ -2436,7 +2537,14 @@ func loginFormHTML(slug, errText string) template.HTML {
 	if errText != "" {
 		errBlock = `<div class="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">` + template.HTMLEscapeString(errText) + `</div>`
 	}
-	return template.HTML(errBlock + `<form id="login-passkey-form" method="POST" class="space-y-4">
+	return template.HTML(errBlock + `<div class="space-y-4">
+<button id="login-discoverable-btn" class="w-full bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm" type="button">Use passkey</button>
+<div class="flex items-center gap-3">
+  <div class="h-px bg-gray-200 flex-1"></div>
+  <div class="text-xs text-gray-500 font-medium">or</div>
+  <div class="h-px bg-gray-200 flex-1"></div>
+</div>
+<form id="login-passkey-form" method="POST" class="space-y-4">
 <div>
   <label class="block text-sm font-medium text-gray-700">Email</label>
   <input class="mt-1 block w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" name="email" type="email" required autocomplete="email">
@@ -2447,8 +2555,9 @@ func loginFormHTML(slug, errText string) template.HTML {
 <script>
 (function() {
   const form = document.getElementById("login-passkey-form");
+  const discoverableBtn = document.getElementById("login-discoverable-btn");
   const status = document.getElementById("login-status");
-  if (!form) return;
+  if (!form || !status) return;
 
   const b64ToBuf = (b64) => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
   const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -2479,6 +2588,7 @@ func loginFormHTML(slug, errText string) template.HTML {
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    status.className = "mt-4 text-sm text-gray-600";
     status.textContent = "Starting passkey login...";
     try {
       const startResp = await fetch("/t/` + template.HTMLEscapeString(slug) + `/login/passkey/start", { method: "POST", body: buildFormData(form) });
@@ -2495,9 +2605,35 @@ func loginFormHTML(slug, errText string) template.HTML {
       const finish = await finishResp.json();
       window.location.href = finish.redirect;
     } catch (err) {
+      status.className = "mt-4 text-sm text-red-700";
       status.textContent = "Login failed: " + err.message;
     }
   });
+
+  if(discoverableBtn){
+    discoverableBtn.addEventListener("click", async () => {
+      status.className = "mt-4 text-sm text-gray-600";
+      status.textContent = "Starting passkey login...";
+      try {
+        const startResp = await fetch("/t/` + template.HTMLEscapeString(slug) + `/login/passkey/discoverable/start", { method: "POST" });
+        if (!startResp.ok) throw new Error(await startResp.text());
+        const start = await startResp.json();
+        const opts = start.options.publicKey || (start.options.response && start.options.response.publicKey) || start.options;
+        const assertion = await navigator.credentials.get({ publicKey: normalizeAssertion(opts) });
+        const finishResp = await fetch("/t/` + template.HTMLEscapeString(slug) + `/login/passkey/discoverable/finish?flow_id=" + encodeURIComponent(start.flow_id), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(marshalAssertion(assertion))
+        });
+        if (!finishResp.ok) throw new Error(await finishResp.text());
+        const finish = await finishResp.json();
+        window.location.href = finish.redirect;
+      } catch (err) {
+        status.className = "mt-4 text-sm text-red-700";
+        status.textContent = "Login failed: " + err.message;
+      }
+    });
+  }
 })();
 </script>`)
 }
