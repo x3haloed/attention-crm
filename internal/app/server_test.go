@@ -1,6 +1,7 @@
 package app
 
 import (
+	"attention-crm/internal/tenantdb"
 	"net/http/httptest"
 	"net/netip"
 	"testing"
@@ -80,5 +81,65 @@ func TestUniversalNoteParsing(t *testing.T) {
 	}
 	if looksLikeNote("Sarah Johnson") {
 		t.Fatalf("expected looksLikeNote false for name-only input")
+	}
+}
+
+func TestOmniBuildActionsLimitsToTwoPlusPick(t *testing.T) {
+	now := time.Date(2026, 2, 21, 10, 0, 0, 0, time.Local)
+	q := "Bob suggested that we could lower the price"
+	matches := []tenantdb.Contact{
+		{ID: 1, Name: "Bob Smith"},
+		{ID: 2, Name: "Sarah Chen"},
+		{ID: 3, Name: "Alex Johnson"},
+	}
+
+	acts := omniBuildActions(now, q, matches, nil)
+	if len(acts) != 3 {
+		t.Fatalf("expected 3 actions (2 log + pick), got %d: %+v", len(acts), acts)
+	}
+	if acts[0].Type != "log_interaction" || acts[1].Type != "log_interaction" {
+		t.Fatalf("expected first two actions log_interaction, got %+v", acts)
+	}
+	if acts[2].Type != "pick_entity" {
+		t.Fatalf("expected third action pick_entity, got %+v", acts)
+	}
+	if acts[0].ContactID != 1 || acts[1].ContactID != 2 {
+		t.Fatalf("expected first two contacts 1 and 2, got %+v", acts)
+	}
+}
+
+func TestOmniBuildActionsFallsBackToOptions(t *testing.T) {
+	now := time.Date(2026, 2, 21, 10, 0, 0, 0, time.Local)
+	q := "Call Bob tomorrow"
+	opts := []tenantdb.Contact{
+		{ID: 11, Name: "Bob Smith"},
+		{ID: 12, Name: "Sarah Chen"},
+	}
+
+	acts := omniBuildActions(now, q, nil, opts)
+	if len(acts) != 3 {
+		t.Fatalf("expected 3 actions (2 log + pick), got %d: %+v", len(acts), acts)
+	}
+	if acts[0].ContactID != 11 || acts[1].ContactID != 12 {
+		t.Fatalf("expected fallback to options, got %+v", acts)
+	}
+	if acts[2].Type != "pick_entity" {
+		t.Fatalf("expected pick_entity row, got %+v", acts)
+	}
+	if acts[0].DueAt == "" || acts[2].DueAt == "" {
+		t.Fatalf("expected due suggestion to propagate, got %+v", acts)
+	}
+}
+
+func TestOmniBuildActionsCreateContact(t *testing.T) {
+	now := time.Date(2026, 2, 21, 10, 0, 0, 0, time.Local)
+	q := "Sarah Chen"
+
+	acts := omniBuildActions(now, q, nil, nil)
+	if len(acts) != 1 {
+		t.Fatalf("expected 1 create_contact action, got %d: %+v", len(acts), acts)
+	}
+	if acts[0].Type != "create_contact" || acts[0].Name != "Sarah Chen" {
+		t.Fatalf("unexpected action: %+v", acts[0])
 	}
 }

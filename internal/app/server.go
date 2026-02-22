@@ -672,6 +672,16 @@ type omniContact struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type omniAction struct {
+	Type            string `json:"type"`
+	ContactID       int64  `json:"contact_id,omitempty"`
+	ContactName     string `json:"contact_name,omitempty"`
+	InteractionType string `json:"interaction_type,omitempty"`
+	Content         string `json:"content,omitempty"`
+	DueAt           string `json:"due_at,omitempty"`
+	Name            string `json:"name,omitempty"`
+}
+
 func inferInteractionTypeFromText(q string) string {
 	t := strings.ToLower(strings.TrimSpace(q))
 	switch {
@@ -686,6 +696,59 @@ func inferInteractionTypeFromText(q string) string {
 	}
 }
 
+func omniBuildActions(now time.Time, q string, matches []tenantdb.Contact, contactOptions []tenantdb.Contact) []omniAction {
+	var actions []omniAction
+
+	if looksLikeNote(q) {
+		itype := inferInteractionTypeFromText(q)
+		dueLocal, hasDue := parseDueSuggestionLocal(q, now)
+
+		candidates := matches
+		if len(candidates) == 0 {
+			candidates = contactOptions
+		}
+
+		limit := 2
+		if len(candidates) < limit {
+			limit = len(candidates)
+		}
+		for i := 0; i < limit; i++ {
+			act := omniAction{
+				Type:            "log_interaction",
+				ContactID:       candidates[i].ID,
+				ContactName:     candidates[i].Name,
+				InteractionType: itype,
+				Content:         q,
+			}
+			if hasDue {
+				act.DueAt = dueLocal
+			}
+			actions = append(actions, act)
+		}
+
+		// Always offer an explicit resolver that starts a "pick entity" flow.
+		// (MVP: contacts only, but this row is intentionally generalized.)
+		pick := omniAction{
+			Type:            "pick_entity",
+			InteractionType: itype,
+			Content:         q,
+		}
+		if hasDue {
+			pick.DueAt = dueLocal
+		}
+		actions = append(actions, pick)
+	}
+
+	if looksLikeContactName(q) {
+		actions = append(actions, omniAction{
+			Type: "create_contact",
+			Name: q,
+		})
+	}
+
+	return actions
+}
+
 func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
@@ -695,10 +758,12 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
 		s.writeJSON(w, http.StatusOK, map[string]any{
+			"version":  2,
 			"open":     false,
 			"query":    "",
+			"rows":     []map[string]any{},
 			"contacts": []omniContact{},
-			"actions":  []map[string]any{},
+			"actions":  []omniAction{},
 		})
 		return
 	}
@@ -727,48 +792,55 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 		})
 	}
 
-	actions := []map[string]any{}
+	var opts []tenantdb.Contact
 	if looksLikeNote(q) {
-		itype := inferInteractionTypeFromText(q)
-		dueLocal, hasDue := parseDueSuggestionLocal(q, time.Now())
-
-		candidates := matches
-		if len(candidates) == 0 {
-			// If we can't infer a contact from the note text, still offer one-shot logging
-			// against a few common contacts so the palette isn't empty.
-			if opts, err := db.ContactOptions(); err == nil && len(opts) > 0 {
-				candidates = opts
-			}
-		}
-
-		limit := 3
-		if len(candidates) < limit {
-			limit = len(candidates)
-		}
-		for i := 0; i < limit; i++ {
-			act := map[string]any{
-				"type":             "log_interaction",
-				"contact_id":       candidates[i].ID,
-				"contact_name":     candidates[i].Name,
-				"interaction_type": itype,
-				"content":          q,
-			}
-			if hasDue {
-				act["due_at"] = dueLocal
-			}
-			actions = append(actions, act)
+		// If we can't infer a target from the note text, still offer one-shot logging
+		// against a few common contacts so the palette isn't empty.
+		if o, err := db.ContactOptions(); err == nil && len(o) > 0 {
+			opts = o
 		}
 	}
-	if looksLikeContactName(q) {
-		actions = append(actions, map[string]any{
-			"type": "create_contact",
-			"name": q,
+	actions := omniBuildActions(time.Now(), q, matches, opts)
+
+	// v2: prefer a flat row list with explicit kinds.
+	rows := make([]map[string]any, 0, len(contacts)+len(actions))
+	for _, c := range contacts {
+		rows = append(rows, map[string]any{
+			"kind":       "contact",
+			"id":         c.ID,
+			"name":       c.Name,
+			"company":    c.Company,
+			"updated_at": c.UpdatedAt,
 		})
+	}
+	for _, a := range actions {
+		row := map[string]any{"kind": a.Type}
+		if a.ContactID != 0 {
+			row["contact_id"] = a.ContactID
+		}
+		if a.ContactName != "" {
+			row["contact_name"] = a.ContactName
+		}
+		if a.InteractionType != "" {
+			row["interaction_type"] = a.InteractionType
+		}
+		if a.Content != "" {
+			row["content"] = a.Content
+		}
+		if a.DueAt != "" {
+			row["due_at"] = a.DueAt
+		}
+		if a.Name != "" {
+			row["name"] = a.Name
+		}
+		rows = append(rows, row)
 	}
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
+		"version":  2,
 		"open":     true,
 		"query":    q,
+		"rows":     rows,
 		"contacts": contacts,
 		"actions":  actions,
 	})
@@ -2020,6 +2092,9 @@ func renderTenantAppBody(
   var items = [];
   var selected = 0;
   var open = false;
+  var pickMode = false;
+  var pickPayload = null;
+  var lastResult = null;
   var timer = null;
   var lastQuery = "";
 
@@ -2042,7 +2117,7 @@ func renderTenantAppBody(
 
   function render(){
     if(!open){ panel.innerHTML = ""; return; }
-    var html = '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Search Results</div>';
+    var html = '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">' + (pickMode ? 'Pick Contact' : 'Search Results') + '</div>';
     items.forEach(function(it, idx){
       if(it.kind === "contact"){
         var rowClass = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
@@ -2058,7 +2133,7 @@ func renderTenantAppBody(
             '</div>' +
             (it.subline ? '<div class="text-xs text-gray-500">'+escHtml(it.subline)+'</div>' : '') +
           '</div>' +
-          '<div class="text-xs text-blue-600 font-medium">Open</div>' +
+          '<div class="text-xs text-blue-600 font-medium">'+(pickMode ? 'Select' : 'Open')+'</div>' +
         '</div>';
         return;
       }
@@ -2100,14 +2175,34 @@ func renderTenantAppBody(
         '</div>';
         return;
       }
+      if(it.kind === "pick_entity"){
+        var rowClass4 = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClass4 = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        var label2 = 'Pick contact…';
+        var sub2 = (it.content || '').trim();
+        if(sub2.length > 120) sub2 = sub2.slice(0, 117) + '...';
+        html += '<div class="'+rowClass4+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">'+escHtml(label2)+'</div>' +
+            '<div class="text-xs text-gray-500">'+escHtml(sub2)+'</div>' +
+          '</div>' +
+          '<div class="text-xs text-gray-900 font-medium">Choose</div>' +
+        '</div>';
+        return;
+      }
     });
     panel.innerHTML = html;
   }
 
-  function setItems(result){
-    items = [];
+  function buildContactItems(result){
+    var out = [];
     (result.contacts || []).forEach(function(c){
-      items.push({
+      out.push({
         kind: "contact",
         id: c.id,
         name: c.name,
@@ -2116,21 +2211,77 @@ func renderTenantAppBody(
         subline: ""
       });
     });
-    (result.actions || []).forEach(function(a){
-      if(a.type === "log_interaction"){
-        items.push({
-          kind: "log_interaction",
-          contact_id: a.contact_id,
-          contact_name: a.contact_name || "",
-          interaction_type: a.interaction_type || "note",
-          content: a.content || "",
-          due_at: a.due_at || ""
+    return out;
+  }
+
+  function buildItemsFromV2Rows(rows){
+    var out = [];
+    (rows || []).forEach(function(r){
+      if(!r || !r.kind) return;
+      if(r.kind === "contact"){
+        out.push({
+          kind: "contact",
+          id: r.id,
+          name: r.name,
+          company: r.company || "",
+          initials: (r.name || "?").split(/\s+/).filter(Boolean).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase() || "?",
+          subline: ""
         });
+        return;
       }
-      if(a.type === "create_contact"){
-        items.push({kind:"create_contact", name: a.name});
+      if(r.kind === "log_interaction"){
+        out.push({
+          kind: "log_interaction",
+          contact_id: r.contact_id,
+          contact_name: r.contact_name || "",
+          interaction_type: r.interaction_type || "note",
+          content: r.content || "",
+          due_at: r.due_at || ""
+        });
+        return;
+      }
+      if(r.kind === "create_contact"){
+        out.push({kind:"create_contact", name: r.name});
+        return;
+      }
+      if(r.kind === "pick_entity"){
+        out.push({
+          kind: "pick_entity",
+          interaction_type: r.interaction_type || "note",
+          content: r.content || "",
+          due_at: r.due_at || ""
+        });
+        return;
       }
     });
+    return out;
+  }
+
+  function setItems(result){
+    lastResult = result || {};
+    if(result && result.version === 2 && Array.isArray(result.rows)){
+      items = buildItemsFromV2Rows(result.rows || []);
+    }else{
+      items = buildContactItems(result || {});
+      (result.actions || []).forEach(function(a){
+        if(a.type === "log_interaction"){
+          items.push({
+            kind: "log_interaction",
+            contact_id: a.contact_id,
+            contact_name: a.contact_name || "",
+            interaction_type: a.interaction_type || "note",
+            content: a.content || "",
+            due_at: a.due_at || ""
+          });
+        }
+        if(a.type === "create_contact"){
+          items.push({kind:"create_contact", name: a.name});
+        }
+      });
+    }
+    if(pickMode){
+      items = buildContactItems(result || {});
+    }
     selected = 0;
     setOpen(items.length > 0);
     render();
@@ -2140,6 +2291,36 @@ func renderTenantAppBody(
     var it = items[idx];
     if(!it) return;
     if(it.kind === "contact"){
+      if(pickMode && pickPayload){
+        var fPick = document.createElement("form");
+        fPick.method = "POST";
+        fPick.action = "/t/" + tenantSlug + "/interactions/quick";
+        var pc1 = document.createElement("input");
+        pc1.type = "hidden";
+        pc1.name = "contact_id";
+        pc1.value = String(it.id || "");
+        fPick.appendChild(pc1);
+        var pc2 = document.createElement("input");
+        pc2.type = "hidden";
+        pc2.name = "type";
+        pc2.value = String(pickPayload.interaction_type || "note");
+        fPick.appendChild(pc2);
+        var pc3 = document.createElement("input");
+        pc3.type = "hidden";
+        pc3.name = "content";
+        pc3.value = String(pickPayload.content || "");
+        fPick.appendChild(pc3);
+        if(pickPayload.due_at){
+          var pc4 = document.createElement("input");
+          pc4.type = "hidden";
+          pc4.name = "due_at";
+          pc4.value = String(pickPayload.due_at || "");
+          fPick.appendChild(pc4);
+        }
+        document.body.appendChild(fPick);
+        fPick.submit();
+        return;
+      }
       window.location.href = "/t/" + tenantSlug + "/contacts/" + it.id;
       return;
     }
@@ -2187,6 +2368,15 @@ func renderTenantAppBody(
       f2.submit();
       return;
     }
+    if(it.kind === "pick_entity"){
+      pickMode = true;
+      pickPayload = {interaction_type: it.interaction_type || "note", content: it.content || "", due_at: it.due_at || ""};
+      items = buildContactItems(lastResult || {});
+      selected = 0;
+      setOpen(items.length > 0);
+      render();
+      return;
+    }
   }
 
   function fetchResults(){
@@ -2231,6 +2421,12 @@ func renderTenantAppBody(
     }
     if(e.key === "Escape"){
       e.preventDefault();
+      if(pickMode){
+        pickMode = false;
+        pickPayload = null;
+        setItems(lastResult || {});
+        return;
+      }
       setOpen(false);
       return;
     }
