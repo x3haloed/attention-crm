@@ -34,7 +34,12 @@ func (s *Server) handleMembersPage(w http.ResponseWriter, r *http.Request, tenan
 
 	body := renderMembersBody(tenant, sess.UserID, members, invites)
 	csrf := s.ensureCSRFCookie(w, r)
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{Title: "Members", Body: body, CSRFToken: csrf})
+	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+		Title:     "Members",
+		OmniBar:   renderOmniBar(tenant, "", "header"),
+		Body:      body,
+		CSRFToken: csrf,
+	})
 }
 
 func (s *Server) handleRevokeInvite(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {

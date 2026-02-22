@@ -158,6 +158,7 @@ type session struct {
 type pageData struct {
 	Title     string
 	Header    template.HTML
+	OmniBar   template.HTML
 	MainID    string
 	MainClass string
 	Body      template.HTML
