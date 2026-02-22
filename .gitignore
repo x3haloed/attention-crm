@@ -6,6 +6,8 @@
 
 web/static/tailwind.css
 tmp/
+output/playwright/
+.playwright-cli/
 
 # Created by https://www.toptal.com/developers/gitignore/api/go,linux,macos,windows,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,linux,macos,windows,node

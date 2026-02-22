@@ -12,6 +12,7 @@ type Config struct {
 	WebAuthnRPID    string
 	WebAuthnName    string
 	WebAuthnOrigins []string
+	DevNoAuth       bool
 }
 
 func ConfigFromEnv() Config {
@@ -49,11 +50,14 @@ func ConfigFromEnv() Config {
 		}
 	}
 
+	devNoAuth := os.Getenv("ATTENTION_DEV_NOAUTH")
+
 	return Config{
 		ListenAddr:      listen,
 		DataDir:         dataDir,
 		WebAuthnRPID:    rpID,
 		WebAuthnName:    rpName,
 		WebAuthnOrigins: origins,
+		DevNoAuth:       devNoAuth == "1" || strings.EqualFold(devNoAuth, "true"),
 	}
 }

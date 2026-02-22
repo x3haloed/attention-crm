@@ -51,6 +51,7 @@ Optional environment variables:
 - Passkeys are now the primary setup/login path.
 - Release build (single binary): `scripts/build_release.sh` (writes `dist/attention`).
 - Self-hosting (TLS + WebAuthn config): `docs/self-host.md`.
+- Design regression screenshots (compares app vs `docs/design/*`): `scripts/design_regression.sh` (writes to `output/playwright/`).
 - Task board: `.isnad/state/board.md` (regenerate with `python3 tools/work-board/scripts/fold_state.py --root .`).
 - Task board UI: `python3 scripts/isnad_board.py` (local web UI that writes directives).
 - Control receipts: `python3 scripts/isnad_ack.py` (appends `ack_directive` evidence records for any unacked directives).

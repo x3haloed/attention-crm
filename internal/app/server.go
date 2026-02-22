@@ -76,7 +76,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{
+	s := &Server{
 		cfg:          cfg,
 		control:      controlStore,
 		sessionKey:   key,
@@ -87,7 +87,13 @@ func NewServer(cfg Config) (*Server, error) {
 		webauthnFlow: map[string]ceremonyFlow{},
 		lim:          map[string]*rate.Limiter{},
 		limSeen:      map[string]time.Time{},
-	}, nil
+	}
+
+	if cfg.DevNoAuth {
+		_ = s.ensureDevFixture()
+	}
+
+	return s, nil
 }
 
 func isSecureRequest(r *http.Request) bool {
@@ -143,6 +149,59 @@ func (s *Server) allowRate(r *http.Request, bucket string, perSecond float64, bu
 	}
 
 	return lim.Allow()
+}
+
+func (s *Server) ensureDevFixture() error {
+	const slug = "acme"
+	const workspace = "Acme"
+
+	tenant, err := s.control.TenantBySlug(slug)
+	if err != nil {
+		if errors.Is(err, control.ErrTenantNotFound) {
+			tenant, err = s.control.CreateTenant(slug, workspace)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	hasUsers, err := db.HasUsers()
+	if err != nil {
+		return err
+	}
+	if !hasUsers {
+		if _, err := db.CreateInitialUserForPasskey(workspace, "owner@example.com", "Owner"); err != nil {
+			return err
+		}
+	}
+
+	existing, _ := db.SearchContacts("Sarah", 1)
+	if len(existing) == 0 {
+		_ = db.CreateContact("Sarah Chen", "sarah.chen@acmecorp.com", "+1 (555) 123-4567", "Acme Corporation", "")
+		_ = db.CreateContact("Bob Smith", "bob@betacorp.com", "", "Beta Corp", "")
+		_ = db.CreateContact("Alex Johnson", "alex@startup.io", "", "Startup.io", "")
+	}
+
+	sarah, _ := db.SearchContacts("Sarah Chen", 1)
+	if len(sarah) == 1 {
+		contactID := sarah[0].ID
+		recent, _ := db.ListRecentInteractions(1)
+		if len(recent) == 0 {
+			due := time.Now().Add(2 * time.Hour)
+			_ = db.CreateInteraction(contactID, "call", "Follow up call scheduled", &due)
+			_ = db.CreateInteraction(contactID, "note", "Called about Q1 budget planning", nil)
+		}
+	}
+
+	return nil
 }
 
 func randomTokenB64(n int) string {
@@ -1492,22 +1551,47 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, payload any) {
 func (s *Server) readSession(r *http.Request) (session, bool) {
 	cookie, err := r.Cookie("attention_session")
 	if err != nil {
+		if s.cfg.DevNoAuth {
+			if slug, _, ok := parseTenantPath(r.URL.Path); ok {
+				return session{TenantSlug: slug, UserID: 1}, true
+			}
+		}
 		return session{}, false
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
 	if err != nil {
+		if s.cfg.DevNoAuth {
+			if slug, _, ok := parseTenantPath(r.URL.Path); ok {
+				return session{TenantSlug: slug, UserID: 1}, true
+			}
+		}
 		return session{}, false
 	}
 	parts := strings.Split(string(decoded), "|")
 	if len(parts) != 3 {
+		if s.cfg.DevNoAuth {
+			if slug, _, ok := parseTenantPath(r.URL.Path); ok {
+				return session{TenantSlug: slug, UserID: 1}, true
+			}
+		}
 		return session{}, false
 	}
 	payload := parts[0] + "|" + parts[1]
 	if !hmac.Equal([]byte(sign(payload, s.sessionKey)), []byte(parts[2])) {
+		if s.cfg.DevNoAuth {
+			if slug, _, ok := parseTenantPath(r.URL.Path); ok {
+				return session{TenantSlug: slug, UserID: 1}, true
+			}
+		}
 		return session{}, false
 	}
 	userID, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
+		if s.cfg.DevNoAuth {
+			if slug, _, ok := parseTenantPath(r.URL.Path); ok {
+				return session{TenantSlug: slug, UserID: 1}, true
+			}
+		}
 		return session{}, false
 	}
 	return session{TenantSlug: parts[0], UserID: userID}, true
