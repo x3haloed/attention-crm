@@ -419,14 +419,16 @@ func renderTenantAppBody(
       if(firstTargetID() === ""){
         items.push({kind:"pick_entity", action:"create_deal", content:title});
       }
-    }
-    // Local-only: contact mode always offers create contact from typed text.
-    if(!pickMode && intentNow === "contact"){
-      var cname = qNow;
-      if(cname !== ""){
-        items.push({kind:"create_contact", name: cname});
-      }
-    }
+	    }
+	    // Local-only: contact mode always offers create contact from typed text.
+	    if(!pickMode && intentNow === "contact"){
+	      var cname = qNow;
+	      // De-dupe server-provided create_contact rows; in contact mode we want exactly one.
+	      items = items.filter(function(it){ return it.kind !== "create_contact"; });
+	      if(cname !== ""){
+	        items.push({kind:"create_contact", name: cname});
+	      }
+	    }
     selected = 0;
     setOpen(items.length > 0);
     render();
