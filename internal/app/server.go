@@ -532,6 +532,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleCreateContact(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/contacts/quick":
 		s.handleQuickCreateContact(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/deals/quick":
+		s.handleQuickCreateDeal(w, r, tenant)
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/contacts/"):
 		s.handleContactDetail(w, r, tenant, rest)
 	case r.Method == http.MethodPost && strings.HasPrefix(rest, "/contacts/") && strings.HasSuffix(rest, "/update"):
@@ -892,6 +894,52 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.handleApp(w, r, tenant, appViewState{Flash: "Contact created."})
+}
+
+func (s *Server) handleQuickCreateDeal(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+	sess, ok := s.readSession(r)
+	if !ok || sess.TenantSlug != tenant.Slug {
+		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
+		return
+	}
+	if err := parseMaybeMultipartForm(r); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+
+	title := strings.TrimSpace(r.FormValue("title"))
+	if title == "" {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Deal title is required."})
+		return
+	}
+	contactID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("contact_id")), 10, 64)
+	if err != nil || contactID <= 0 {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Deal creation failed: contact is required."})
+		return
+	}
+
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	if _, err := db.ContactByID(contactID); err != nil {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Deal creation failed: contact does not exist."})
+		return
+	}
+	dealID, err := db.CreateDeal(title, []int64{contactID})
+	if err != nil {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Deal creation failed: " + err.Error()})
+		return
+	}
+	_ = db.CreateDealEvent(dealID, "system", "Created from omnibar.")
+
+	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }
 
 func (s *Server) renderLogin(w http.ResponseWriter, slug, errText string) {
@@ -2341,10 +2389,24 @@ func renderTenantAppBody(
     return false;
   }
 
+  function getIntent(){
+    for(var i=0;i<chips.length;i++){
+      if(chips[i].kind === "intent" && chips[i].intent) return String(chips[i].intent);
+    }
+    return "";
+  }
+
+  function firstTargetID(){
+    for(var i=0;i<chips.length;i++){
+      if(chips[i].kind === "target" && chips[i].id) return String(chips[i].id);
+    }
+    return "";
+  }
+
   function setIntentChip(intent){
     intent = String(intent || "").trim().toLowerCase();
     if(intent === "meet") intent = "meeting";
-    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting") return;
+    if(intent !== "note" && intent !== "call" && intent !== "email" && intent !== "meeting" && intent !== "deal") return;
 
     // Remove any existing intent chip, then add as the left-most chip.
     chips = chips.filter(function(c){ return c.kind !== "intent"; });
@@ -2358,7 +2420,7 @@ func renderTenantAppBody(
 
   function maybeCommitIntentFromInput(){
     var v = String(input.value || "");
-    var m = v.match(/^\\s*(note|call|email|meeting|meet)\\s*:\\s*/i);
+    var m = v.match(/^\\s*(note|call|email|meeting|meet|deal)\\s*:\\s*/i);
     if(!m) return false;
     setIntentChip(m[1]);
     input.value = v.slice(m[0].length);
@@ -2489,6 +2551,26 @@ func renderTenantAppBody(
         '</div>';
         return;
       }
+      if(it.kind === "create_deal"){
+        var rowClass5 = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClass5 = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        var title = (it.title || '').trim();
+        if(title.length > 120) title = title.slice(0, 117) + '...';
+        var hint = it.needs_pick ? 'Pick a contact to attach' : 'Creates a deal attached to selected contact';
+        html += '<div class="'+rowClass5+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 6h-3.586l-1.707-1.707A1 1 0 0 0 14 4H10a1 1 0 0 0-.707.293L7.586 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm0 12H4V8h4l2-2h4l2 2h4v10Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">Create deal: '+escHtml(title || 'Untitled')+'</div>' +
+            '<div class="text-xs text-gray-500">'+escHtml(hint)+'</div>' +
+          '</div>' +
+          '<div class="text-xs text-purple-700 font-medium">Create</div>' +
+        '</div>';
+        return;
+      }
     });
     panel.innerHTML = html;
   }
@@ -2576,6 +2658,19 @@ func renderTenantAppBody(
     if(pickMode){
       items = buildContactItems(result || {});
     }
+
+    // Local-only: deal mode rows are derived from chip state.
+    if(!pickMode && getIntent() === "deal"){
+      var title = String(input.value || "").trim();
+      items.push({
+        kind: "create_deal",
+        title: title,
+        needs_pick: firstTargetID() === ""
+      });
+      if(firstTargetID() === ""){
+        items.push({kind:"pick_entity", action:"create_deal", content:title});
+      }
+    }
     selected = 0;
     setOpen(items.length > 0);
     render();
@@ -2586,6 +2681,24 @@ func renderTenantAppBody(
     if(!it) return;
     if(it.kind === "contact"){
       if(pickMode && pickPayload){
+        if(pickPayload.action === "create_deal"){
+          var fDeal = document.createElement("form");
+          fDeal.method = "POST";
+          fDeal.action = "/t/" + tenantSlug + "/deals/quick";
+          var dc1 = document.createElement("input");
+          dc1.type = "hidden";
+          dc1.name = "contact_id";
+          dc1.value = String(it.id || "");
+          fDeal.appendChild(dc1);
+          var dc2 = document.createElement("input");
+          dc2.type = "hidden";
+          dc2.name = "title";
+          dc2.value = String(pickPayload.title || pickPayload.content || "");
+          fDeal.appendChild(dc2);
+          document.body.appendChild(fDeal);
+          fDeal.submit();
+          return;
+        }
         var fPick = document.createElement("form");
         fPick.method = "POST";
         fPick.action = "/t/" + tenantSlug + "/interactions/quick";
@@ -2615,8 +2728,8 @@ func renderTenantAppBody(
         fPick.submit();
         return;
       }
-      // If we already have target chips, treat Enter as "select target" rather than navigate.
-      if(chips.length > 0){
+      // If we already have an intent or target chips, treat Enter as "select target" rather than navigate.
+      if(getIntent() !== "" || chips.length > 0){
         addTargetChip({id: it.id, name: it.name, company: it.company});
         input.value = "";
         setOpen(false);
@@ -2672,11 +2785,41 @@ func renderTenantAppBody(
     }
     if(it.kind === "pick_entity"){
       pickMode = true;
-      pickPayload = {interaction_type: it.interaction_type || "note", content: it.content || "", due_at: it.due_at || ""};
+      pickPayload = {action: it.action || "log_interaction", interaction_type: it.interaction_type || "note", content: it.content || "", due_at: it.due_at || "", title: it.title || ""};
       items = buildContactItems(lastResult || {});
       selected = 0;
       setOpen(items.length > 0);
       render();
+      return;
+    }
+    if(it.kind === "create_deal"){
+      var title = String(it.title || input.value || "").trim();
+      if(title === "") return;
+      var tid = firstTargetID();
+      if(!tid){
+        pickMode = true;
+        pickPayload = {action:"create_deal", title:title};
+        items = buildContactItems(lastResult || {});
+        selected = 0;
+        setOpen(items.length > 0);
+        render();
+        return;
+      }
+      var fd = document.createElement("form");
+      fd.method = "POST";
+      fd.action = "/t/" + tenantSlug + "/deals/quick";
+      var d1 = document.createElement("input");
+      d1.type = "hidden";
+      d1.name = "contact_id";
+      d1.value = String(tid);
+      fd.appendChild(d1);
+      var d2 = document.createElement("input");
+      d2.type = "hidden";
+      d2.name = "title";
+      d2.value = String(title);
+      fd.appendChild(d2);
+      document.body.appendChild(fd);
+      fd.submit();
       return;
     }
   }
@@ -2699,7 +2842,7 @@ func renderTenantAppBody(
   input.addEventListener("keydown", function(e){
     if(e.key === ":"){
       var tok = String(input.value || "").trim().toLowerCase();
-      if(tok === "note" || tok === "call" || tok === "email" || tok === "meeting" || tok === "meet"){
+      if(tok === "note" || tok === "call" || tok === "email" || tok === "meeting" || tok === "meet" || tok === "deal"){
         e.preventDefault();
         setIntentChip(tok);
         input.value = "";
