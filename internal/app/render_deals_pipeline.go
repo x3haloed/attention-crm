@@ -90,6 +90,9 @@ func renderDealsPipelineBody(tenant control.Tenant, rows []tenantdb.DealPipeline
 			if dueT, ok := parseRFC3339(d.NextStepDueAt.String); ok && dueT.Before(now) {
 				attnClass = "text-red-700"
 			}
+		} else if staleLabel(d.LastActivityAt, now) != "" {
+			attn = staleLabel(d.LastActivityAt, now)
+			attnClass = "text-amber-700"
 		}
 
 		b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(d.ID, 10) + `" class="block p-4 rounded-2xl border border-gray-200 hover:bg-gray-50">`)

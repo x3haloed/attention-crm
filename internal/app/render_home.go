@@ -110,6 +110,8 @@ func renderTenantAppBody(
 				}
 				if d.NextStepDueAt.Valid && d.NextStepCompleted.Valid == false {
 					meta = meta + " • " + dueLabel(d.NextStepDueAt.String, now)
+				} else if strings.TrimSpace(d.NextStep) != "" && staleLabel(d.LastActivityAt, now) != "" {
+					meta = meta + " • " + staleLabel(d.LastActivityAt, now)
 				}
 				b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(d.ID, 10) + `" class="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50">`)
 				b.WriteString(`<div class="flex items-start justify-between gap-3">`)

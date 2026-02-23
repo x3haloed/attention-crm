@@ -278,3 +278,21 @@ func dealStateBadge(state string) string {
 	}
 	return `<span class="text-xs font-medium rounded-full px-2 py-0.5 ` + cls + `">` + template.HTMLEscapeString(label) + `</span>`
 }
+
+func isStale(lastActivityAt string, now time.Time) bool {
+	t, ok := parseRFC3339(lastActivityAt)
+	if !ok {
+		return false
+	}
+	return now.Sub(t) >= 7*24*time.Hour
+}
+
+func staleLabel(lastActivityAt string, now time.Time) string {
+	if !isStale(lastActivityAt, now) {
+		return ""
+	}
+	if lastActivityAt == "" {
+		return "Stale"
+	}
+	return "Stale • Updated " + relativeTime(lastActivityAt, now)
+}

@@ -18,6 +18,7 @@ func (s *Store) ListDealsNeedsAttention(limit int) ([]Deal, error) {
 
 	now := time.Now().UTC()
 	cutoff := now.Add(48 * time.Hour).Format(time.RFC3339Nano)
+	staleCutoff := now.Add(-7 * 24 * time.Hour).Format(time.RFC3339Nano)
 
 	rows, err := s.db.Query(`
 SELECT id, title, state, value_cents, stage_label, next_step, next_step_due_at, next_step_completed_at,
@@ -28,6 +29,7 @@ WHERE workspace_id = ?
   AND (
     TRIM(COALESCE(next_step, '')) = ''
     OR (next_step_due_at IS NOT NULL AND next_step_due_at != '' AND next_step_completed_at IS NULL AND next_step_due_at <= ?)
+    OR (last_activity_at IS NOT NULL AND last_activity_at != '' AND last_activity_at <= ?)
   )
 ORDER BY
   CASE WHEN TRIM(COALESCE(next_step, '')) = '' THEN 0 ELSE 1 END ASC,
@@ -35,7 +37,7 @@ ORDER BY
   last_activity_at DESC,
   id DESC
 LIMIT ?
-`, workspaceID, cutoff, limit)
+`, workspaceID, cutoff, staleCutoff, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +84,7 @@ func (s *Store) ListDealsPipeline(limit int) ([]DealPipelineRow, error) {
 
 	now := time.Now().UTC()
 	cutoff := now.Add(48 * time.Hour).Format(time.RFC3339Nano)
+	staleCutoff := now.Add(-7 * 24 * time.Hour).Format(time.RFC3339Nano)
 
 	rows, err := s.db.Query(`
 SELECT
@@ -103,11 +106,15 @@ ORDER BY
     WHEN d.next_step_due_at IS NOT NULL AND d.next_step_due_at != '' AND d.next_step_completed_at IS NULL AND d.next_step_due_at <= ? THEN 0
     ELSE 1
   END ASC,
+  CASE
+    WHEN d.last_activity_at IS NOT NULL AND d.last_activity_at != '' AND d.last_activity_at <= ? THEN 0
+    ELSE 1
+  END ASC,
   COALESCE(d.next_step_due_at, '') ASC,
   d.last_activity_at DESC,
   d.id DESC
 LIMIT ?
-`, workspaceID, cutoff, limit)
+`, workspaceID, cutoff, staleCutoff, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -23,6 +23,7 @@ const omnibarClientJS = `(function(){
   var timer = null;
   var lastQuery = "";
   var chips = []; // [{kind:'target', id, label, href}]
+  var pickRestoreContent = "";
 
   function setOpen(isOpen){
     open = isOpen;
@@ -92,6 +93,42 @@ const omnibarClientJS = `(function(){
     return true;
   }
 
+  function looksLikeNoteClient(q){
+    var t = String(q || "").trim();
+    if(!t) return false;
+    var words = t.split(/\s+/).filter(Boolean);
+    if(words.length >= 4) return true;
+    var lower = t.toLowerCase();
+    var hints = ["mentioned","discussed","said","follow up","follow-up","remind","today","tomorrow","next week","next steps"];
+    for(var i=0;i<hints.length;i++){
+      if(lower.indexOf(hints[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  var INTENTS = [
+    {key:"note", label:"Note"},
+    {key:"call", label:"Call"},
+    {key:"email", label:"Email"},
+    {key:"meeting", label:"Meeting"},
+    {key:"deal", label:"Deal"},
+    {key:"contact", label:"Contact"}
+  ];
+
+  function maybeAddIntentRows(out, qNow){
+    var t = String(qNow || "").trim().toLowerCase();
+    if(!t) return;
+    var max = 2;
+    for(var i=0;i<INTENTS.length;i++){
+      var ik = INTENTS[i].key;
+      if(ik.indexOf(t) === 0 || t.indexOf(ik) === 0){
+        out.unshift({kind:"intent_mode", intent:ik, label:INTENTS[i].label});
+        max--;
+        if(max <= 0) break;
+      }
+    }
+  }
+
   function addTargetChip(contact){
     if(!contact || !contact.id) return;
     if(hasTargetChip(contact.id)) return;
@@ -142,6 +179,23 @@ const omnibarClientJS = `(function(){
     if(!open){ panel.innerHTML = ""; return; }
     var html = '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">' + (pickMode ? 'Pick Contact' : 'Search Results') + '</div>';
     items.forEach(function(it, idx){
+      if(it.kind === "intent_mode"){
+        var rowClassI = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClassI = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        html += '<div class="'+rowClassI+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 11H7v-2h6V7h2v6Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">'+escHtml(it.label)+' mode</div>' +
+            '<div class="text-xs text-gray-500">Commit a '+escHtml(it.label)+' chip</div>' +
+          '</div>' +
+          '<div class="text-xs text-gray-900 font-medium">Chip</div>' +
+        '</div>';
+        return;
+      }
       if(it.kind === "contact"){
         var rowClass = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
         if(idx === selected){
@@ -322,6 +376,7 @@ const omnibarClientJS = `(function(){
 
   function setItems(result){
     lastResult = result || {};
+    var qNow = String(input.value || "").trim();
     if(result && result.version === 2 && Array.isArray(result.rows)){
       items = buildItemsFromV2Rows(result.rows || []);
     }else{
@@ -348,10 +403,15 @@ const omnibarClientJS = `(function(){
 
     var intentNow = getIntent();
     var target = firstTarget();
-    var qNow = String(input.value || "").trim();
+    var noteLike = looksLikeNoteClient(qNow);
 
-    if(!pickMode && (intentNow === "note" || intentNow === "call" || intentNow === "email" || intentNow === "meeting") && !target){
-      items.push({kind:"pick_target", content: qNow});
+    if(!pickMode && !intentNow){
+      if(noteLike){
+        // Ensure "Note mode" is always visible for note-like input.
+        items.unshift({kind:"intent_mode", intent:"note", label:"Note"});
+      }else{
+        maybeAddIntentRows(items, qNow);
+      }
     }
 
     if(!pickMode && target && (intentNow === "note" || intentNow === "call" || intentNow === "email" || intentNow === "meeting")){
@@ -367,6 +427,11 @@ const omnibarClientJS = `(function(){
         });
       }
       items.push({kind:"pick_entity", action:"log_interaction", interaction_type:intentNow, content:qNow, due_at:""});
+    }
+
+    if(!pickMode && (intentNow === "note" || intentNow === "call" || intentNow === "email" || intentNow === "meeting") && !target){
+      // If intent is locked but no target exists, the primary path is to pick a target (while keeping content).
+      items.unshift({kind:"pick_target", content:qNow});
     }
 
     if(!pickMode && intentNow === "deal"){
@@ -389,6 +454,24 @@ const omnibarClientJS = `(function(){
       }
     }
 
+    // If the server provided explicit note actions, ensure they're prominent (avoid "Create contact" stealing Enter).
+    if(!pickMode && !intentNow){
+      var firstActionIdx = -1;
+      for(var ix=0; ix<items.length; ix++){
+        if(items[ix].kind === "log_interaction" || items[ix].kind === "pick_entity"){ firstActionIdx = ix; break; }
+      }
+      if(firstActionIdx > 0){
+        var actionItems = items.splice(firstActionIdx, items.length - firstActionIdx);
+        // Keep any existing intent_mode rows first, then actions, then remaining.
+        var head = [];
+        var rest = [];
+        items.forEach(function(it){
+          if(it.kind === "intent_mode"){ head.push(it); } else { rest.push(it); }
+        });
+        items = head.concat(actionItems, rest);
+      }
+    }
+
     selected = 0;
     setOpen(items.length > 0);
     render();
@@ -397,6 +480,22 @@ const omnibarClientJS = `(function(){
   function activate(idx){
     var it = items[idx];
     if(!it) return;
+    if(it.kind === "intent_mode"){
+      var prev = String(input.value || "");
+      setIntentChip(it.intent);
+      var lower = prev.trim().toLowerCase();
+      if(lower === String(it.intent || "").toLowerCase() || lower === (String(it.intent || "").toLowerCase() + " mode")){
+        input.value = "";
+      }else{
+        // Preserve content when committing intent for note-like scenarios.
+        input.value = prev;
+      }
+      setOpen(false);
+      panel.innerHTML = "";
+      items = [];
+      input.focus();
+      return;
+    }
     if(it.kind === "contact"){
       if(pickMode && pickPayload){
         if(pickPayload.action === "create_deal"){
@@ -419,43 +518,16 @@ const omnibarClientJS = `(function(){
         }
         if(pickPayload.action === "set_target"){
           addTargetChip({id: it.id, name: it.name, company: it.company});
-          input.value = "";
+          input.value = pickRestoreContent || "";
           setOpen(false);
           pickMode = false;
           pickPayload = null;
+          pickRestoreContent = "";
           items = [];
           panel.innerHTML = "";
           input.focus();
           return;
         }
-        var fPick = document.createElement("form");
-        fPick.method = "POST";
-        fPick.action = tpath("/interactions/quick");
-        var pc1 = document.createElement("input");
-        pc1.type = "hidden";
-        pc1.name = "contact_id";
-        pc1.value = String(it.id || "");
-        fPick.appendChild(pc1);
-        var pc2 = document.createElement("input");
-        pc2.type = "hidden";
-        pc2.name = "type";
-        pc2.value = String(pickPayload.interaction_type || "note");
-        fPick.appendChild(pc2);
-        var pc3 = document.createElement("input");
-        pc3.type = "hidden";
-        pc3.name = "content";
-        pc3.value = String(pickPayload.content || "");
-        fPick.appendChild(pc3);
-        if(pickPayload.due_at){
-          var pc4 = document.createElement("input");
-          pc4.type = "hidden";
-          pc4.name = "due_at";
-          pc4.value = String(pickPayload.due_at || "");
-          fPick.appendChild(pc4);
-        }
-        document.body.appendChild(fPick);
-        fPick.submit();
-        return;
       }
       if(getIntent() !== "" || chips.length > 0){
         addTargetChip({id: it.id, name: it.name, company: it.company});
@@ -519,7 +591,13 @@ const omnibarClientJS = `(function(){
     }
     if(it.kind === "pick_entity"){
       pickMode = true;
-      pickPayload = {action: it.action || "log_interaction", interaction_type: it.interaction_type || "note", content: it.content || "", due_at: it.due_at || "", title: it.title || ""};
+      pickRestoreContent = String(it.content || input.value || "").trim();
+      if(!getIntent()){
+        setIntentChip(String(it.interaction_type || "note"));
+      }
+      pickPayload = {action: "set_target"};
+      // Clear input to search contacts, but preserve content so user can keep typing after picking.
+      input.value = "";
       items = buildContactItems(lastResult || {});
       selected = 0;
       setOpen(items.length > 0);
@@ -528,7 +606,9 @@ const omnibarClientJS = `(function(){
     }
     if(it.kind === "pick_target"){
       pickMode = true;
+      pickRestoreContent = String(it.content || input.value || "").trim();
       pickPayload = {action: "set_target"};
+      input.value = "";
       items = buildContactItems(lastResult || {});
       selected = 0;
       setOpen(items.length > 0);
@@ -542,6 +622,7 @@ const omnibarClientJS = `(function(){
       if(!tid){
         pickMode = true;
         pickPayload = {action:"create_deal", title:title};
+        pickRestoreContent = "";
         items = buildContactItems(lastResult || {});
         selected = 0;
         setOpen(items.length > 0);
@@ -647,13 +728,37 @@ const omnibarClientJS = `(function(){
     }
     if(e.key === "Tab"){
       var itTab = items[selected];
-      if(itTab && itTab.kind === "contact"){
+      if(itTab && itTab.kind === "intent_mode"){
         e.preventDefault();
-        addTargetChip({id: itTab.id, name: itTab.name, company: itTab.company});
-        input.value = "";
+        var prev2 = String(input.value || "");
+        setIntentChip(itTab.intent);
+        var lower2 = prev2.trim().toLowerCase();
+        if(lower2 === String(itTab.intent || "").toLowerCase() || lower2 === (String(itTab.intent || "").toLowerCase() + " mode")){
+          input.value = "";
+        }else{
+          input.value = prev2;
+        }
         setOpen(false);
         pickMode = false;
         pickPayload = null;
+        pickRestoreContent = "";
+        items = [];
+        panel.innerHTML = "";
+        input.focus();
+        return;
+      }
+      if(itTab && itTab.kind === "contact"){
+        e.preventDefault();
+        addTargetChip({id: itTab.id, name: itTab.name, company: itTab.company});
+        if(pickMode && pickPayload && pickPayload.action === "set_target"){
+          input.value = pickRestoreContent || "";
+        }else{
+          input.value = "";
+        }
+        setOpen(false);
+        pickMode = false;
+        pickPayload = null;
+        pickRestoreContent = "";
         items = [];
         panel.innerHTML = "";
         input.focus();
@@ -682,6 +787,11 @@ const omnibarClientJS = `(function(){
       if(pickMode){
         pickMode = false;
         pickPayload = null;
+        // Restore user content after canceling a pick flow.
+        if(pickRestoreContent){
+          input.value = pickRestoreContent;
+        }
+        pickRestoreContent = "";
         setItems(lastResult || {});
         return;
       }
