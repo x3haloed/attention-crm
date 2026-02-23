@@ -55,6 +55,9 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
 		return
 	}
+	if !requireSameOrigin(w, r) {
+		return
+	}
 	if err := parseMaybeMultipartForm(r); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -117,6 +120,9 @@ func (s *Server) handleLoginPasskeyDiscoverableStart(w http.ResponseWriter, r *h
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
 		return
 	}
+	if !requireSameOrigin(w, r) {
+		return
+	}
 
 	options, sessionData, err := s.webauthn.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
@@ -138,6 +144,9 @@ func (s *Server) handleLoginPasskeyDiscoverableStart(w http.ResponseWriter, r *h
 func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	if !s.allowRate(r, "login_passkey_discoverable_finish|"+tenant.Slug, 1, 10) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+	if !requireSameOrigin(w, r) {
 		return
 	}
 
@@ -198,6 +207,9 @@ func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *
 func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	if !s.allowRate(r, "login_passkey_finish|"+tenant.Slug, 1, 10) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+	if !requireSameOrigin(w, r) {
 		return
 	}
 	flowID := strings.TrimSpace(r.URL.Query().Get("flow_id"))
@@ -267,6 +279,9 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
 		return
 	}
+	if !requireSameOrigin(w, r) {
+		return
+	}
 	token, ok := parseInviteToken(rest)
 	if !ok {
 		http.NotFound(w, r)
@@ -322,6 +337,9 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
 	if !s.allowRate(r, "invite_passkey_finish|"+tenant.Slug, 0.5, 10) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
+	if !requireSameOrigin(w, r) {
 		return
 	}
 	token, ok := parseInviteToken(rest)
