@@ -3,12 +3,14 @@ package tenantdb
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	lockFile *os.File
 }
 
 type User struct {
