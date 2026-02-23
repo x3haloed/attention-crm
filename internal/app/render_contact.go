@@ -15,6 +15,7 @@ func renderContactDetailBody(
 	deals []tenantdb.Deal,
 	timeline []tenantdb.Interaction,
 	flash string,
+	highlightInteractionID int64,
 ) template.HTML {
 	var b strings.Builder
 	tenantSlugEsc := template.HTMLEscapeString(tenant.Slug)
@@ -123,6 +124,11 @@ func renderContactDetailBody(
 		action := ``
 		icon := interactionIcon(it.Type, "normal")
 		meta := relativeTime(it.CreatedAt, now)
+		itemID := "interaction-" + strconv.FormatInt(it.ID, 10)
+		if highlightInteractionID > 0 && it.ID == highlightInteractionID {
+			itemClass = `flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg`
+			chip = `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">Just logged</span>`
+		}
 
 		if it.CompletedAt.Valid {
 			itemClass = `flex items-start space-x-3 p-4 bg-green-50 border border-green-200 rounded-lg`
@@ -136,7 +142,7 @@ func renderContactDetailBody(
 			action = `<form method="POST" action="/t/` + tenantSlugEsc + `/interactions/` + strconv.FormatInt(it.ID, 10) + `/complete" style="margin:0"><button class="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline" type="submit">Mark complete</button></form>`
 		}
 
-		b.WriteString(`<div class="` + itemClass + `">`)
+		b.WriteString(`<div id="` + itemID + `" class="` + itemClass + `">`)
 		if chip != "" {
 			b.WriteString(`<div class="flex items-center space-x-2">` + icon + chip + `</div>`)
 		} else {

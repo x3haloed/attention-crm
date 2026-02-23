@@ -5,6 +5,7 @@ import (
 	"attention-crm/internal/tenantdb"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -59,7 +60,12 @@ func (s *Server) handleContactDetail(w http.ResponseWriter, r *http.Request, ten
 		http.NotFound(w, r)
 		return
 	}
-	s.handleContactDetailWithFlash(w, r, tenant, contactID, "")
+	flash := ""
+	switch strings.TrimSpace(r.URL.Query().Get("flash")) {
+	case "interaction_logged":
+		flash = "Interaction logged."
+	}
+	s.handleContactDetailWithFlash(w, r, tenant, contactID, flash)
 }
 
 func (s *Server) handleUpdateContact(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
@@ -140,8 +146,15 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	var highlightInteractionID int64
+	if raw := strings.TrimSpace(r.URL.Query().Get("hl")); raw != "" {
+		if id, err := strconv.ParseInt(raw, 10, 64); err == nil && id > 0 {
+			highlightInteractionID = id
+		}
+	}
+
 	header := renderContactHeader(tenant, contact)
-	body := renderContactDetailBody(tenant, contact, deals, timeline, flash)
+	body := renderContactDetailBody(tenant, contact, deals, timeline, flash, highlightInteractionID)
 	csrf := s.ensureCSRFCookie(w, r)
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     contact.Name,

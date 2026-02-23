@@ -65,7 +65,15 @@ func (s *Server) handleQuickCreateInteraction(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	http.Redirect(w, r, "/t/"+tenant.Slug+"/contacts/"+strconv.FormatInt(contactID, 10), http.StatusSeeOther)
+	// Redirect to the contact and explicitly highlight the newly-created interaction so users
+	// don't feel like their omnibar entry was lost.
+	interactionID, _ := db.LatestInteractionIDByContact(contactID)
+
+	redirect := "/t/" + tenant.Slug + "/contacts/" + strconv.FormatInt(contactID, 10) + "?flash=interaction_logged"
+	if interactionID > 0 {
+		redirect = redirect + "&hl=" + strconv.FormatInt(interactionID, 10) + "#interaction-" + strconv.FormatInt(interactionID, 10)
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {

@@ -198,3 +198,22 @@ LIMIT ?
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) LatestInteractionIDByContact(contactID int64) (int64, error) {
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return 0, err
+	}
+	row := s.db.QueryRow(`
+SELECT id
+FROM interactions
+WHERE workspace_id = ? AND contact_id = ?
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`, workspaceID, contactID)
+	var id int64
+	if err := row.Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
