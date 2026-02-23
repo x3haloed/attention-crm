@@ -19,7 +19,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /setup/passkey/finish", s.handleSetupPasskeyFinish)
 	mux.HandleFunc("GET /t/", s.handleTenantRoute)
 	mux.HandleFunc("POST /t/", s.handleTenantRoute)
-	return loggingMiddleware(s.bodyLimitMiddleware(mux))
+	return loggingMiddleware(s.securityHeadersMiddleware(s.bodyLimitMiddleware(mux)))
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {

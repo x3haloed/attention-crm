@@ -27,6 +27,24 @@ func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Safe defaults that don't interfere with inline scripts/styles.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("X-Frame-Options", "DENY")
+		// Use CSP only for clickjacking protection to avoid breaking the app (inline scripts, Google Fonts, etc.).
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+
+		if s.isSecureRequest(r) {
+			// Only send HSTS over HTTPS.
+			w.Header().Set("Strict-Transport-Security", "max-age=15552000; includeSubDomains")
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) isSecureRequest(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
