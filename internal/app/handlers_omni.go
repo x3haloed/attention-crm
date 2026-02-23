@@ -9,6 +9,33 @@ import (
 	"time"
 )
 
+type omniRowV2 struct {
+	Kind string `json:"kind"`
+
+	// Contact row.
+	ID        int64  `json:"id,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Company   string `json:"company,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+
+	// Interaction/action rows.
+	ContactID       int64  `json:"contact_id,omitempty"`
+	ContactName     string `json:"contact_name,omitempty"`
+	InteractionType string `json:"interaction_type,omitempty"`
+	Content         string `json:"content,omitempty"`
+	DueAt           string `json:"due_at,omitempty"`
+}
+
+type omniResponseV2 struct {
+	Version int    `json:"version"`
+	Open    bool   `json:"open"`
+	Query   string `json:"query"`
+
+	Rows     []omniRowV2   `json:"rows"`
+	Contacts []omniContact `json:"contacts"`
+	Actions  []omniAction  `json:"actions"`
+}
+
 func inferInteractionTypeFromText(q string) string {
 	t := strings.ToLower(strings.TrimSpace(q))
 	switch {
@@ -84,13 +111,13 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
-		s.writeJSON(w, http.StatusOK, map[string]any{
-			"version":  2,
-			"open":     false,
-			"query":    "",
-			"rows":     []map[string]any{},
-			"contacts": []omniContact{},
-			"actions":  []omniAction{},
+		s.writeJSON(w, http.StatusOK, omniResponseV2{
+			Version:  2,
+			Open:     false,
+			Query:    "",
+			Rows:     []omniRowV2{},
+			Contacts: []omniContact{},
+			Actions:  []omniAction{},
 		})
 		return
 	}
@@ -130,46 +157,35 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 	actions := omniBuildActions(time.Now(), q, matches, opts)
 
 	// v2: prefer a flat row list with explicit kinds.
-	rows := make([]map[string]any, 0, len(contacts)+len(actions))
+	rows := make([]omniRowV2, 0, len(contacts)+len(actions))
 	for _, c := range contacts {
-		rows = append(rows, map[string]any{
-			"kind":       "contact",
-			"id":         c.ID,
-			"name":       c.Name,
-			"company":    c.Company,
-			"updated_at": c.UpdatedAt,
+		rows = append(rows, omniRowV2{
+			Kind:      "contact",
+			ID:        c.ID,
+			Name:      c.Name,
+			Company:   c.Company,
+			UpdatedAt: c.UpdatedAt,
 		})
 	}
 	for _, a := range actions {
-		row := map[string]any{"kind": a.Type}
-		if a.ContactID != 0 {
-			row["contact_id"] = a.ContactID
-		}
-		if a.ContactName != "" {
-			row["contact_name"] = a.ContactName
-		}
-		if a.InteractionType != "" {
-			row["interaction_type"] = a.InteractionType
-		}
-		if a.Content != "" {
-			row["content"] = a.Content
-		}
-		if a.DueAt != "" {
-			row["due_at"] = a.DueAt
-		}
-		if a.Name != "" {
-			row["name"] = a.Name
-		}
-		rows = append(rows, row)
+		rows = append(rows, omniRowV2{
+			Kind:            a.Type,
+			ContactID:       a.ContactID,
+			ContactName:     a.ContactName,
+			InteractionType: a.InteractionType,
+			Content:         a.Content,
+			DueAt:           a.DueAt,
+			Name:            a.Name,
+		})
 	}
 
-	s.writeJSON(w, http.StatusOK, map[string]any{
-		"version":  2,
-		"open":     true,
-		"query":    q,
-		"rows":     rows,
-		"contacts": contacts,
-		"actions":  actions,
+	s.writeJSON(w, http.StatusOK, omniResponseV2{
+		Version:  2,
+		Open:     true,
+		Query:    q,
+		Rows:     rows,
+		Contacts: contacts,
+		Actions:  actions,
 	})
 }
 
