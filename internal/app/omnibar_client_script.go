@@ -36,6 +36,7 @@ const omnibarClientJS = `(function(){
     card.classList.toggle("ring-opacity-20", isOpen);
     icon.classList.toggle("text-gray-400", !isOpen);
     icon.classList.toggle("text-blue-600", isOpen);
+    syncGuidance();
   }
 
   function escHtml(s){
@@ -173,11 +174,58 @@ const omnibarClientJS = `(function(){
       }
     });
     chipsEl.innerHTML = html;
+    syncGuidance();
+  }
+
+  function guidancePlaceholder(){
+    var intent = getIntent();
+    var target = firstTarget();
+    if(pickMode) return "Pick a contact… e.g. Bob Smith";
+    if(intent === "contact") return "Contact name… e.g. Bob Smith";
+    if(intent === "deal"){
+      if(target) return "Deal title… e.g. Renewal Q2";
+      return "Deal title… then pick contact (e.g. Renewal Q2)";
+    }
+    if(intent === "note" || intent === "call" || intent === "email" || intent === "meeting"){
+      var label = intent.charAt(0).toUpperCase() + intent.slice(1);
+      if(target && target.name) return label + " for " + target.name + "… e.g. Sent proposal Friday";
+      return label + "… then pick contact (e.g. Bob mentioned pricing)";
+    }
+    if(target && target.name) return "Type a note for " + target.name + "… e.g. Follow up Friday";
+    return "Search contacts, deals, or type a note… e.g. Bob mentioned pricing";
+  }
+
+  function guidanceHelp(){
+    var intent = getIntent();
+    var target = firstTarget();
+    var qNow = String(input.value || "").trim();
+    if(pickMode) return "Type to search contacts, then press Enter to select.";
+    if(intent === "contact") return "Type a name. Use Open existing if it looks like a duplicate.";
+    if(intent === "deal"){
+      if(target) return qNow ? "Press Enter to create this deal." : "Type a deal title, then press Enter.";
+      return "Pick a contact to attach this deal to.";
+    }
+    if(intent === "note" || intent === "call" || intent === "email" || intent === "meeting"){
+      if(target && qNow) return "Press Enter to log.";
+      if(target) return "Type your message. Press Enter to log.";
+      return "Pick a contact to log with (Pick contact… keeps your text).";
+    }
+    return "";
+  }
+
+  function syncGuidance(){
+    if(!input) return;
+    input.setAttribute("placeholder", guidancePlaceholder());
   }
 
   function render(){
     if(!open){ panel.innerHTML = ""; return; }
-    var html = '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">' + (pickMode ? 'Pick Contact' : 'Search Results') + '</div>';
+    var heading = (pickMode ? "Pick Contact" : "Search Results");
+    var help = guidanceHelp();
+    var html = '<div class="mb-3">' +
+      '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider">' + escHtml(heading) + '</div>' +
+      (help ? '<div class="mt-1 text-xs text-gray-500">' + escHtml(help) + '</div>' : '') +
+    '</div>';
     items.forEach(function(it, idx){
       if(it.kind === "intent_mode"){
         var rowClassI = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
@@ -884,6 +932,7 @@ const omnibarClientJS = `(function(){
   });
 
   input.addEventListener("input", function(){
+    syncGuidance();
     if(maybeCommitIntentFromInput()){
       setOpen(false);
       panel.innerHTML = "";
@@ -894,6 +943,7 @@ const omnibarClientJS = `(function(){
   });
 
   renderChips();
+  syncGuidance();
 
   // Quick-capture buttons: focus omnibar and set intent chip.
   document.addEventListener("click", function(e){
