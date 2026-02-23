@@ -54,7 +54,7 @@ func renderContactDetailBody(
 	b.WriteString(`<input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" id="follow-up-toggle">`)
 	b.WriteString(`<span class="text-sm font-medium text-gray-700">Set follow-up</span></label>`)
 	b.WriteString(`<div id="follow-up-date-container" class="hidden px-3 pb-3 bg-gray-50 border-t border-gray-200">`)
-	b.WriteString(`<input name="due_at" type="datetime-local" class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mt-2">`)
+	b.WriteString(`<input id="follow-up-due-at" name="due_at" type="datetime-local" disabled class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mt-2">`)
 	b.WriteString(`</div></div></div>`)
 	b.WriteString(`<div class="flex justify-end pt-2"><button class="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-sm w-full sm:w-auto flex items-center justify-center space-x-2"><span>Log interaction</span></button></div>`)
 	b.WriteString(`</div></form></div>`)
@@ -217,7 +217,22 @@ func renderContactDetailBody(
 
   var toggle = document.getElementById('follow-up-toggle');
   var container = document.getElementById('follow-up-date-container');
-  if (toggle && container) toggle.addEventListener('change', function(){ container.classList.toggle('hidden', !toggle.checked); });
+  var dueInput = document.getElementById('follow-up-due-at');
+  function syncFollowup(){
+    if (!toggle || !container) return;
+    var on = !!toggle.checked;
+    container.classList.toggle('hidden', !on);
+    if(dueInput){
+      // Avoid browser validation lockups when a required input is hidden.
+      dueInput.disabled = !on;
+      dueInput.required = on;
+      if(!on){ dueInput.value = ""; }
+    }
+  }
+  if (toggle && container){
+    syncFollowup();
+    toggle.addEventListener('change', syncFollowup);
+  }
 })();
 </script>`)
 
