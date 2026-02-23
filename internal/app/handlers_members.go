@@ -2,7 +2,6 @@ package app
 
 import (
 	"attention-crm/internal/control"
-	"attention-crm/internal/tenantdb"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +13,7 @@ func (s *Server) handleMembersPage(w http.ResponseWriter, r *http.Request, tenan
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
 		return
 	}
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,7 +56,7 @@ func (s *Server) handleRevokeInvite(w http.ResponseWriter, r *http.Request, tena
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -90,7 +89,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request, tena
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

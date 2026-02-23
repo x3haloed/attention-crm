@@ -19,6 +19,7 @@ type Config struct {
 	DevNoAuth           bool
 	TrustedProxies      []netip.Prefix
 	MaxRequestBodyBytes int64
+	BackupBeforeMigrate bool
 }
 
 func ConfigFromEnv() Config {
@@ -101,6 +102,16 @@ func ConfigFromEnv() Config {
 		}
 	}
 
+	backupBeforeMigrate := true
+	if raw := strings.TrimSpace(os.Getenv("ATTENTION_BACKUP_BEFORE_MIGRATE")); raw != "" {
+		switch {
+		case raw == "0" || strings.EqualFold(raw, "false") || strings.EqualFold(raw, "no"):
+			backupBeforeMigrate = false
+		case raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes"):
+			backupBeforeMigrate = true
+		}
+	}
+
 	return Config{
 		ListenAddr:          listen,
 		DataDir:             dataDir,
@@ -111,5 +122,6 @@ func ConfigFromEnv() Config {
 		DevNoAuth:           devNoAuth == "1" || strings.EqualFold(devNoAuth, "true"),
 		TrustedProxies:      trustedProxies,
 		MaxRequestBodyBytes: maxBodyBytes,
+		BackupBeforeMigrate: backupBeforeMigrate,
 	}
 }

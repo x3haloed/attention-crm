@@ -5,6 +5,7 @@ This app is designed to run as a single Go binary with SQLite on disk.
 ## Passkeys (WebAuthn) requirements
 
 - For non-localhost deployments, WebAuthn requires HTTPS.
+- `ATTENTION_PUBLIC_ORIGIN` should be the exact origin users will visit (e.g. `https://crm.example.com`). It is used as the default WebAuthn origin, and to derive a default RPID.
 - `ATTENTION_WEBAUTHN_RPID` must match your site’s “relying party id” (typically your domain, e.g. `crm.example.com` or `example.com`).
 - `ATTENTION_WEBAUTHN_ORIGINS` must include the exact origin(s) users will visit (e.g. `https://crm.example.com`).
 
@@ -60,6 +61,7 @@ Run it:
 ```bash
 ATTENTION_LISTEN_ADDR=127.0.0.1:8080 \
 ATTENTION_DATA_DIR=/var/lib/attention-crm \
+ATTENTION_PUBLIC_ORIGIN=https://crm.example.com \
 ATTENTION_WEBAUTHN_RPID=crm.example.com \
 ATTENTION_WEBAUTHN_ORIGINS=https://crm.example.com \
 ./dist/attention
@@ -68,6 +70,19 @@ ATTENTION_WEBAUTHN_ORIGINS=https://crm.example.com \
 ## Data and backups
 
 - Control-plane registry DB: `<data_dir>/control.sqlite`
-- Tenant DBs: `<data_dir>/tenants/<tenant_slug>.sqlite`
+- Tenant DBs: `<data_dir>/tenants/<opaque_storage_key>/tenant.db`
 
-Back up the whole `ATTENTION_DATA_DIR` directory (while the app is stopped, or using filesystem snapshots).
+Recommended:
+
+- Back up the whole `ATTENTION_DATA_DIR` directory (while the app is stopped, or using filesystem snapshots).
+- Or use the built-in per-tenant commands:
+
+```bash
+./dist/attention backup --tenant acme --data-dir /var/lib/attention-crm
+./dist/attention restore --tenant acme --from /var/lib/attention-crm/backups/acme-20260223T000000Z.db --data-dir /var/lib/attention-crm
+```
+
+Migration safety:
+
+- By default, the server writes a one-time “pre-migration” backup (per tenant, per process) under `<data_dir>/backups/migrations/` before applying schema changes.
+- Disable with `ATTENTION_BACKUP_BEFORE_MIGRATE=false` if you have external snapshotting and want to avoid extra files.

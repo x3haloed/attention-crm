@@ -2,7 +2,6 @@ package app
 
 import (
 	"attention-crm/internal/control"
-	"attention-crm/internal/tenantdb"
 	"net/http"
 )
 
@@ -13,7 +12,7 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

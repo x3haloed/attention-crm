@@ -26,7 +26,7 @@ func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant c
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -95,7 +95,7 @@ func (s *Server) handleDealUpdateNextStep(w http.ResponseWriter, r *http.Request
 		dueAt = &parsed
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -124,7 +124,7 @@ func (s *Server) handleDealCompleteNextStep(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -155,7 +155,7 @@ func (s *Server) handleDealCreateEvent(w http.ResponseWriter, r *http.Request, t
 	}
 	typ := strings.TrimSpace(r.FormValue("type"))
 	content := strings.TrimSpace(r.FormValue("content"))
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -187,7 +187,7 @@ func (s *Server) handleDealClose(w http.ResponseWriter, r *http.Request, tenant 
 	state := strings.TrimSpace(r.FormValue("state"))
 	outcome := strings.TrimSpace(r.FormValue("outcome"))
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

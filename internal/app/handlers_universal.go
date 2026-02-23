@@ -28,7 +28,7 @@ func (s *Server) handleUniversalInput(w http.ResponseWriter, r *http.Request, te
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

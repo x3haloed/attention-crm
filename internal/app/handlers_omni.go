@@ -164,7 +164,7 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -265,7 +265,7 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -340,7 +340,7 @@ func (s *Server) handleQuickCreateDeal(w http.ResponseWriter, r *http.Request, t
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

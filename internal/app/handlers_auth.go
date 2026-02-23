@@ -68,7 +68,7 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -161,7 +161,7 @@ func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -223,7 +223,7 @@ func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -254,7 +254,7 @@ func (s *Server) handleInvitePage(w http.ResponseWriter, r *http.Request, tenant
 		http.NotFound(w, r)
 		return
 	}
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -297,7 +297,7 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -359,7 +359,7 @@ func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

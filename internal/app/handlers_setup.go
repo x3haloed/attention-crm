@@ -1,7 +1,6 @@
 package app
 
 import (
-	"attention-crm/internal/tenantdb"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"net/http"
@@ -63,7 +62,7 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -129,7 +128,7 @@ func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request
 		http.Error(w, "tenant not found", http.StatusBadRequest)
 		return
 	}
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

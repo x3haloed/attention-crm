@@ -2,7 +2,6 @@ package app
 
 import (
 	"attention-crm/internal/control"
-	"attention-crm/internal/tenantdb"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -33,7 +32,7 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, ten
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -96,7 +95,7 @@ func (s *Server) handleUpdateContact(w http.ResponseWriter, r *http.Request, ten
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -126,7 +125,7 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

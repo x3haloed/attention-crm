@@ -96,7 +96,7 @@ func (s *Server) ensureDevFixture() error {
 		}
 	}
 
-	db, err := tenantdb.Open(tenant.DBPath)
+	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
 		return err
 	}
