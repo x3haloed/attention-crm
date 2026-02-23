@@ -247,7 +247,16 @@ func renderContactDetailBody(
 
 func renderContactHeader(tenant control.Tenant, contact tenantdb.Contact) template.HTML {
 	tenantSlugEsc := template.HTMLEscapeString(tenant.Slug)
-	name := template.HTMLEscapeString(contact.Name)
+	nameRaw := strings.TrimSpace(contact.Name)
+	name := template.HTMLEscapeString(nameRaw)
+	fallback := strings.TrimSpace(contact.Email)
+	if fallback == "" {
+		fallback = strings.TrimSpace(contact.Phone)
+	}
+	if fallback == "" {
+		fallback = "Unnamed contact"
+	}
+	fallbackEsc := template.HTMLEscapeString(fallback)
 	var b strings.Builder
 	b.WriteString(`<header id="header" class="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">`)
 	b.WriteString(`<div class="flex items-center justify-between max-w-4xl mx-auto">`)
@@ -256,7 +265,11 @@ func renderContactHeader(tenant control.Tenant, contact tenantdb.Contact) templa
 	b.WriteString(`<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.7 6.3 13.3 4.9 6.2 12l7.1 7.1 1.4-1.4L9 12l5.7-5.7Z"/></svg>`)
 	b.WriteString(`</a>`)
 	b.WriteString(`<div class="flex items-center space-x-3">`)
-	b.WriteString(`<input type="text" value="` + name + `" class="text-xl lg:text-2xl font-semibold text-gray-900 bg-transparent border-none outline-none hover:bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1" id="contact-name" data-field="name" autocomplete="off" />`)
+	placeholderAttr := ``
+	if nameRaw == "" {
+		placeholderAttr = ` placeholder="` + fallbackEsc + `"`
+	}
+	b.WriteString(`<input type="text" value="` + name + `"` + placeholderAttr + ` class="text-xl lg:text-2xl font-semibold text-gray-900 bg-transparent border-none outline-none hover:bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-1 placeholder-gray-400" id="contact-name" data-field="name" autocomplete="off" />`)
 	b.WriteString(`<span class="text-xs text-gray-400 font-medium flex items-center space-x-1 transition-all duration-300" id="save-indicator">`)
 	b.WriteString(`<svg class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4Z"/></svg>`)
 	b.WriteString(`<span class="text-green-600">Saved</span>`)

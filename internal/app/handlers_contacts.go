@@ -28,6 +28,10 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, ten
 	phone := r.FormValue("phone")
 	company := r.FormValue("company")
 	notes := r.FormValue("notes")
+	if strings.TrimSpace(name) == "" {
+		s.handleApp(w, r, tenant, appViewState{Flash: "Contact creation failed: contact name is required."})
+		return
+	}
 
 	db, err := tenantdb.Open(tenant.DBPath)
 	if err != nil {
@@ -156,8 +160,18 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 	header := renderContactHeader(tenant, contact)
 	body := renderContactDetailBody(tenant, contact, deals, timeline, flash, highlightInteractionID)
 	csrf := s.ensureCSRFCookie(w, r)
+	title := strings.TrimSpace(contact.Name)
+	if title == "" {
+		title = strings.TrimSpace(contact.Email)
+	}
+	if title == "" {
+		title = strings.TrimSpace(contact.Phone)
+	}
+	if title == "" {
+		title = "Contact"
+	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
-		Title:     contact.Name,
+		Title:     title,
 		Header:    header,
 		MainID:    "main-content",
 		MainClass: "max-w-4xl mx-auto px-4 py-6 lg:px-6",

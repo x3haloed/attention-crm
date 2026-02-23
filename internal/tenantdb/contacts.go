@@ -9,8 +9,13 @@ import (
 
 func (s *Store) CreateContact(name, email, phone, company, notes string) error {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return errors.New("contact name required")
+	email = strings.ToLower(strings.TrimSpace(email))
+	phone = strings.TrimSpace(phone)
+	company = strings.TrimSpace(company)
+	notes = strings.TrimSpace(notes)
+
+	if name == "" && email == "" && phone == "" {
+		return errors.New("contact requires name, email, or phone")
 	}
 
 	workspaceID, err := s.primaryWorkspaceID()
@@ -21,7 +26,7 @@ func (s *Store) CreateContact(name, email, phone, company, notes string) error {
 	_, err = s.db.Exec(`
 INSERT INTO contacts(workspace_id, name, email, phone, company, notes)
 VALUES(?,?,?,?,?,?)
-`, workspaceID, name, strings.TrimSpace(email), strings.TrimSpace(phone), strings.TrimSpace(company), strings.TrimSpace(notes))
+`, workspaceID, name, email, phone, company, notes)
 	return err
 }
 

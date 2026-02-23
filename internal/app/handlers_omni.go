@@ -15,6 +15,8 @@ type omniRowV2 struct {
 	// Contact row.
 	ID        int64  `json:"id,omitempty"`
 	Name      string `json:"name,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
 	Company   string `json:"company,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 
@@ -93,7 +95,7 @@ func omniBuildActions(now time.Time, q string, matches []tenantdb.Contact, conta
 		actions = append(actions, pick)
 	}
 
-	if looksLikeContactName(q) {
+	if looksLikeContactName(q) || looksLikeEmail(q) || looksLikePhone(q) {
 		actions = append(actions, omniAction{
 			Type: "create_contact",
 			Name: q,
@@ -101,6 +103,46 @@ func omniBuildActions(now time.Time, q string, matches []tenantdb.Contact, conta
 	}
 
 	return actions
+}
+
+func looksLikeEmail(input string) bool {
+	t := strings.TrimSpace(input)
+	if len(t) < 6 || len(t) > 254 {
+		return false
+	}
+	if strings.Count(t, "@") != 1 {
+		return false
+	}
+	at := strings.IndexByte(t, '@')
+	if at <= 0 || at >= len(t)-3 {
+		return false
+	}
+	domain := t[at+1:]
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+	if strings.ContainsAny(t, " \t\r\n") {
+		return false
+	}
+	return true
+}
+
+func looksLikePhone(input string) bool {
+	t := strings.TrimSpace(input)
+	if t == "" || len(t) > 40 {
+		return false
+	}
+	digits := 0
+	for _, r := range t {
+		switch {
+		case r >= '0' && r <= '9':
+			digits++
+		case r == '+' || r == '(' || r == ')' || r == '-' || r == ' ' || r == '.':
+		default:
+			return false
+		}
+	}
+	return digits >= 7 && digits <= 15
 }
 
 func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
@@ -141,6 +183,8 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 		contacts = append(contacts, omniContact{
 			ID:        c.ID,
 			Name:      c.Name,
+			Email:     c.Email,
+			Phone:     c.Phone,
 			Company:   c.Company,
 			UpdatedAt: c.UpdatedAt,
 		})
@@ -163,6 +207,8 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 			Kind:      "contact",
 			ID:        c.ID,
 			Name:      c.Name,
+			Email:     c.Email,
+			Phone:     c.Phone,
 			Company:   c.Company,
 			UpdatedAt: c.UpdatedAt,
 		})
@@ -208,12 +254,14 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
+	email := strings.TrimSpace(r.FormValue("email"))
+	phone := strings.TrimSpace(r.FormValue("phone"))
+	if name == "" && email == "" && phone == "" {
 		if wantsJSON {
-			s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "contact name is required"})
+			s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name, email, or phone is required"})
 			return
 		}
-		s.handleApp(w, r, tenant, appViewState{Flash: "Contact name is required."})
+		s.handleApp(w, r, tenant, appViewState{Flash: "Name, email, or phone is required."})
 		return
 	}
 
@@ -224,7 +272,7 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 	}
 	defer db.Close()
 
-	if err := db.CreateContact(name, "", "", "", ""); err != nil {
+	if err := db.CreateContact(name, email, phone, "", ""); err != nil {
 		if wantsJSON {
 			s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "contact creation failed"})
 			return
@@ -232,7 +280,15 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 		s.handleApp(w, r, tenant, appViewState{Flash: "Contact creation failed: " + err.Error()})
 		return
 	}
-	createdMatches, _ := db.SearchContacts(name, 1)
+	searchKey := name
+	if searchKey == "" {
+		if email != "" {
+			searchKey = email
+		} else {
+			searchKey = phone
+		}
+	}
+	createdMatches, _ := db.SearchContacts(searchKey, 1)
 	if len(createdMatches) == 1 {
 		if wantsJSON {
 			c := createdMatches[0]
@@ -241,6 +297,8 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 				"contact": omniContact{
 					ID:        c.ID,
 					Name:      c.Name,
+					Email:     c.Email,
+					Phone:     c.Phone,
 					Company:   c.Company,
 					UpdatedAt: c.UpdatedAt,
 				},

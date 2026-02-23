@@ -24,6 +24,7 @@ const omnibarClientJS = `(function(){
   var lastQuery = "";
   var chips = []; // [{kind:'target', id, label, href}]
   var pickRestoreContent = "";
+  var statusMsg = "";
 
   function setOpen(isOpen){
     open = isOpen;
@@ -133,12 +134,17 @@ const omnibarClientJS = `(function(){
   function addTargetChip(contact){
     if(!contact || !contact.id) return;
     if(hasTargetChip(contact.id)) return;
-    var label = contact.name || "Contact";
+    var label = String(contact.name || "").trim();
+    if(!label){
+      label = String(contact.email || "").trim() || String(contact.phone || "").trim() || "Contact";
+    }
     if(contact.company) label = label + " • " + contact.company;
     chips.push({
       kind: "target",
       id: contact.id,
       name: contact.name || "",
+      email: contact.email || "",
+      phone: contact.phone || "",
       company: contact.company || "",
       label: label,
       href: tpath("/contacts/" + contact.id)
@@ -177,9 +183,59 @@ const omnibarClientJS = `(function(){
     syncGuidance();
   }
 
+  function displayNameForContact(it){
+    var n = String((it && it.name) || "").trim();
+    if(n) return n;
+    var e = String((it && it.email) || "").trim();
+    if(e) return e;
+    var p = String((it && it.phone) || "").trim();
+    if(p) return p;
+    return "Unnamed contact";
+  }
+
+  function looksLikeEmailClient(s){
+    var t = String(s || "").trim();
+    if(t.length < 6 || t.length > 254) return false;
+    if(/\s/.test(t)) return false;
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t);
+  }
+
+  function looksLikePhoneClient(s){
+    var t = String(s || "").trim();
+    if(t === "" || t.length > 40) return false;
+    if(!/^[0-9+\-().\s]+$/.test(t)) return false;
+    var digits = t.replace(/\D/g, "");
+    return digits.length >= 7 && digits.length <= 15;
+  }
+
+  function looksLikeContactNameClient(s){
+    var t = String(s || "").trim();
+    if(t === "" || t.length > 80) return false;
+    var parts = t.split(/\s+/).filter(Boolean);
+    if(parts.length === 0 || parts.length > 4) return false;
+    var stop = {"call":1,"email":1,"meeting":1,"meet":1,"tomorrow":1,"today":1,"next":1,"follow":1,"up":1};
+    for(var i=0;i<parts.length;i++){
+      var p = parts[i];
+      if(stop[String(p||"").toLowerCase()]) return false;
+      if(!/^[A-Za-z'\-]+$/.test(p)) return false;
+    }
+    return true;
+  }
+
+  function inferContactPayload(raw){
+    var t = String(raw || "").trim();
+    if(t === "") return {ok:false, err:"Enter a name, email, or phone number."};
+    if(looksLikeEmailClient(t)) return {ok:true, email:t.toLowerCase()};
+    if(looksLikePhoneClient(t)) return {ok:true, phone:t};
+    if(looksLikeContactNameClient(t)) return {ok:true, name:t};
+    if(looksLikeNoteClient(t)) return {ok:false, err:"That looks like a note. Try note: then pick a contact."};
+    return {ok:false, err:"Can't create a contact from that. Use a name (Bob Smith), email (bob@acme.com), or phone (+1 555 123 4567)."};
+  }
+
   function guidancePlaceholder(){
     var intent = getIntent();
     var target = firstTarget();
+    var targetLabel = target ? (target.name || target.label || "") : "";
     if(pickMode) return "Pick a contact… e.g. Bob Smith";
     if(intent === "contact") return "Contact name… e.g. Bob Smith";
     if(intent === "deal"){
@@ -188,10 +244,10 @@ const omnibarClientJS = `(function(){
     }
     if(intent === "note" || intent === "call" || intent === "email" || intent === "meeting"){
       var label = intent.charAt(0).toUpperCase() + intent.slice(1);
-      if(target && target.name) return label + " for " + target.name + "… e.g. Sent proposal Friday";
+      if(target && targetLabel) return label + " for " + targetLabel + "… e.g. Sent proposal Friday";
       return label + "… then pick contact (e.g. Bob mentioned pricing)";
     }
-    if(target && target.name) return "Type a note for " + target.name + "… e.g. Follow up Friday";
+    if(target && targetLabel) return "Type a note for " + targetLabel + "… e.g. Follow up Friday";
     return "Search contacts, deals, or type a note… e.g. Bob mentioned pricing";
   }
 
@@ -225,6 +281,7 @@ const omnibarClientJS = `(function(){
     var html = '<div class="mb-3">' +
       '<div class="text-xs font-medium text-gray-500 uppercase tracking-wider">' + escHtml(heading) + '</div>' +
       (help ? '<div class="mt-1 text-xs text-gray-500">' + escHtml(help) + '</div>' : '') +
+      (statusMsg ? '<div class="mt-1 text-xs text-red-600">' + escHtml(statusMsg) + '</div>' : '') +
     '</div>';
     items.forEach(function(it, idx){
       if(it.kind === "intent_mode"){
@@ -249,11 +306,12 @@ const omnibarClientJS = `(function(){
         if(idx === selected){
           rowClass = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
         }
+        var cDisplay = displayNameForContact(it);
         html += '<div class="'+rowClass+'" data-idx="'+idx+'">' +
           '<div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center"><span class="text-white text-xs font-semibold">'+escHtml(it.initials)+'</span></div>' +
           '<div class="flex-1">' +
             '<div class="flex items-center space-x-2">' +
-              '<span class="text-sm font-medium text-gray-900">'+escHtml(it.name)+'</span>' +
+              '<span class="text-sm font-medium text-gray-900">'+escHtml(cDisplay)+'</span>' +
               (it.company ? '<span class="text-xs text-gray-500">•</span><span class="text-xs text-gray-600">'+escHtml(it.company)+'</span>' : '') +
             '</div>' +
             (it.subline ? '<div class="text-xs text-gray-500">'+escHtml(it.subline)+'</div>' : '') +
@@ -405,8 +463,10 @@ const omnibarClientJS = `(function(){
         kind: "contact",
         id: c.id,
         name: c.name,
+        email: c.email || "",
+        phone: c.phone || "",
         company: c.company || "",
-        initials: (c.name || "?").split(/\s+/).filter(Boolean).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase() || "?",
+        initials: displayNameForContact(c).split(/\s+/).filter(Boolean).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase() || "?",
         subline: ""
       });
     });
@@ -422,8 +482,10 @@ const omnibarClientJS = `(function(){
           kind: "contact",
           id: r.id,
           name: r.name,
+          email: r.email || "",
+          phone: r.phone || "",
           company: r.company || "",
-          initials: (r.name || "?").split(/\s+/).filter(Boolean).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase() || "?",
+          initials: displayNameForContact(r).split(/\s+/).filter(Boolean).slice(0,2).map(function(p){return p[0]||"";}).join("").toUpperCase() || "?",
           subline: ""
         });
         return;
@@ -672,7 +734,7 @@ const omnibarClientJS = `(function(){
           return;
         }
         if(pickPayload.action === "set_target"){
-          addTargetChip({id: it.id, name: it.name, company: it.company});
+          addTargetChip({id: it.id, name: it.name, email: it.email || "", phone: it.phone || "", company: it.company});
           input.value = pickRestoreContent || "";
           setOpen(false);
           pickMode = false;
@@ -685,7 +747,7 @@ const omnibarClientJS = `(function(){
         }
       }
       if(getIntent() !== "" || chips.length > 0){
-        addTargetChip({id: it.id, name: it.name, company: it.company});
+        addTargetChip({id: it.id, name: it.name, email: it.email || "", phone: it.phone || "", company: it.company});
         input.value = "";
         setOpen(false);
         input.focus();
@@ -796,13 +858,30 @@ const omnibarClientJS = `(function(){
   }
 
   function createContact(name){
+    statusMsg = "";
+    var payload = inferContactPayload(name);
+    if(!payload.ok){
+      statusMsg = payload.err || "Can't create contact.";
+      setOpen(true);
+      render();
+      input.focus();
+      return;
+    }
     var fdC = new FormData();
-    fdC.append("name", String(name || ""));
+    if(payload.name) fdC.append("name", String(payload.name));
+    if(payload.email) fdC.append("email", String(payload.email));
+    if(payload.phone) fdC.append("phone", String(payload.phone));
     fetch(tpath("/contacts/quick"), {method:"POST", body: fdC, headers: {"Accept":"application/json"}})
       .then(function(r){ if(!r.ok) throw new Error("bad"); return r.json(); })
       .then(function(data){
         if(data && data.contact && data.contact.id){
-          addTargetChip({id: data.contact.id, name: data.contact.name || name || "", company: data.contact.company || ""});
+          addTargetChip({
+            id: data.contact.id,
+            name: data.contact.name || "",
+            email: data.contact.email || "",
+            phone: data.contact.phone || "",
+            company: data.contact.company || ""
+          });
         }
         input.value = "";
         setOpen(false);
@@ -812,7 +891,11 @@ const omnibarClientJS = `(function(){
         pickPayload = null;
         input.focus();
       })
-      .catch(function(){});
+      .catch(function(){
+        statusMsg = "Contact creation failed.";
+        setOpen(true);
+        render();
+      });
   }
 
   function fetchResults(){
@@ -822,6 +905,7 @@ const omnibarClientJS = `(function(){
       setOpen(false);
       panel.innerHTML = "";
       items = [];
+      statusMsg = "";
       return;
     }
     fetch(tpath("/omni?q=" + encodeURIComponent(q)), {headers: {"Accept":"application/json"}})
@@ -931,7 +1015,7 @@ const omnibarClientJS = `(function(){
       }
       if(itTab && itTab.kind === "contact"){
         e.preventDefault();
-        addTargetChip({id: itTab.id, name: itTab.name, company: itTab.company});
+        addTargetChip({id: itTab.id, name: itTab.name, email: itTab.email || "", phone: itTab.phone || "", company: itTab.company});
         if(pickMode && pickPayload && pickPayload.action === "set_target"){
           input.value = pickRestoreContent || "";
         }else{
@@ -983,6 +1067,7 @@ const omnibarClientJS = `(function(){
   });
 
   input.addEventListener("input", function(){
+    statusMsg = "";
     syncGuidance();
     if(maybeCommitIntentFromInput()){
       setOpen(false);

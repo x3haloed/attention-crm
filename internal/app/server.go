@@ -136,6 +136,8 @@ func (s *Server) ensureDevFixture() error {
 type omniContact struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
 	Company   string `json:"company"`
 	UpdatedAt string `json:"updated_at"`
 }
