@@ -18,5 +18,4 @@ FROM alpine:3.20
 WORKDIR /app
 COPY --from=build /out/attention ./attention
 EXPOSE 8080
-ENV ATTENTION_LISTEN_ADDR=:8080
 CMD ["./attention"]

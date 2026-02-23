@@ -22,7 +22,17 @@ type Config struct {
 func ConfigFromEnv() Config {
 	listen := os.Getenv("ATTENTION_LISTEN_ADDR")
 	if listen == "" {
-		listen = ":8080"
+		if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+			// Common convention on PaaS (including Render): bind to PORT on 0.0.0.0.
+			// Note: Go's ":<port>" binds on all interfaces, but we make it explicit.
+			if n, err := strconv.Atoi(port); err == nil && n > 0 && n <= 65535 {
+				listen = "0.0.0.0:" + port
+			} else {
+				listen = "0.0.0.0:8080"
+			}
+		} else {
+			listen = "0.0.0.0:8080"
+		}
 	}
 
 	dataDir := os.Getenv("ATTENTION_DATA_DIR")

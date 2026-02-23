@@ -51,6 +51,7 @@ Optional environment variables:
 - Passkeys are now the primary setup/login path.
 - Release build (single binary): `scripts/build_release.sh` (writes `dist/attention`).
 - Self-hosting (TLS + WebAuthn config): `docs/self-host.md`.
+- Render-style PaaS: if `ATTENTION_LISTEN_ADDR` is unset, the app binds to `0.0.0.0:$PORT` (or `0.0.0.0:8080` if `PORT` is unset).
 - Design regression screenshots (compares app vs `docs/design/*`): `scripts/design_regression.sh` (writes to `output/playwright/`).
 - Task board: `.isnad/state/board.md` (regenerate with `python3 tools/work-board/scripts/fold_state.py --root .`).
 - Task board UI: `python3 scripts/isnad_board.py` (local web UI that writes directives).
@@ -76,3 +77,18 @@ Optional environment variables:
   - `GET /t/{slug}/invite/{token}`
   - `POST /t/{slug}/invite/{token}/passkey/start`
   - `POST /t/{slug}/invite/{token}/passkey/finish?flow_id=...`
+
+## Deploy (Render free)
+
+This app needs a stable HTTPS origin for passkeys (WebAuthn). Render provides HTTPS on a stable `onrender.com` subdomain.
+
+Suggested Render Web Service settings (Docker):
+
+- Runtime: Docker (uses `Dockerfile`)
+- Environment variables:
+  - `ATTENTION_DATA_DIR=/tmp/attention-data` (ephemeral demo data; resets on restart/deploy)
+  - `ATTENTION_WEBAUTHN_RPID=<your-service>.onrender.com`
+  - `ATTENTION_WEBAUTHN_ORIGINS=https://<your-service>.onrender.com`
+  - Optional: `ATTENTION_TRUSTED_PROXY_CIDRS=<proxy-cidrs>` (only needed if you want `Secure` cookies / HSTS behind TLS-terminating proxies)
+
+After you create the service, copy its `https://<your-service>.onrender.com` URL, set `ATTENTION_WEBAUTHN_RPID` and `ATTENTION_WEBAUTHN_ORIGINS` to match, and redeploy.
