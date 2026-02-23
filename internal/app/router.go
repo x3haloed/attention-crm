@@ -14,6 +14,7 @@ func (s *Server) Router() http.Handler {
 	static, _ := fs.Sub(web.StaticFS, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 	mux.HandleFunc("GET /", s.handleRoot)
+	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
 	mux.HandleFunc("POST /setup/passkey/start", s.handleSetupPasskeyStart)
 	mux.HandleFunc("POST /setup/passkey/finish", s.handleSetupPasskeyFinish)
