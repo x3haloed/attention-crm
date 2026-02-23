@@ -13,6 +13,20 @@ import (
 	"time"
 )
 
+func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
+	maxBytes := s.cfg.MaxRequestBodyBytes
+	if maxBytes <= 0 {
+		maxBytes = 2 << 20
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch:
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func isSecureRequest(r *http.Request) bool {
 	if r.TLS != nil {
 		return true

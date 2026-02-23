@@ -4,17 +4,19 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
-	ListenAddr      string
-	DataDir         string
-	WebAuthnRPID    string
-	WebAuthnName    string
-	WebAuthnOrigins []string
-	DevNoAuth       bool
-	TrustedProxies  []netip.Prefix
+	ListenAddr          string
+	DataDir             string
+	WebAuthnRPID        string
+	WebAuthnName        string
+	WebAuthnOrigins     []string
+	DevNoAuth           bool
+	TrustedProxies      []netip.Prefix
+	MaxRequestBodyBytes int64
 }
 
 func ConfigFromEnv() Config {
@@ -68,13 +70,21 @@ func ConfigFromEnv() Config {
 		}
 	}
 
+	maxBodyBytes := int64(2 << 20) // 2 MiB
+	if raw := strings.TrimSpace(os.Getenv("ATTENTION_MAX_BODY_BYTES")); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			maxBodyBytes = n
+		}
+	}
+
 	return Config{
-		ListenAddr:      listen,
-		DataDir:         dataDir,
-		WebAuthnRPID:    rpID,
-		WebAuthnName:    rpName,
-		WebAuthnOrigins: origins,
-		DevNoAuth:       devNoAuth == "1" || strings.EqualFold(devNoAuth, "true"),
-		TrustedProxies:  trustedProxies,
+		ListenAddr:          listen,
+		DataDir:             dataDir,
+		WebAuthnRPID:        rpID,
+		WebAuthnName:        rpName,
+		WebAuthnOrigins:     origins,
+		DevNoAuth:           devNoAuth == "1" || strings.EqualFold(devNoAuth, "true"),
+		TrustedProxies:      trustedProxies,
+		MaxRequestBodyBytes: maxBodyBytes,
 	}
 }
