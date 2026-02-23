@@ -214,6 +214,23 @@ const omnibarClientJS = `(function(){
         '</div>';
         return;
       }
+      if(it.kind === "open_existing_contact"){
+        var rowClassDup = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClassDup = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        html += '<div class="'+rowClassDup+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 1 21h22L12 2Zm1 16h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">Open existing: '+escHtml(it.name)+'</div>' +
+            '<div class="text-xs text-amber-700">Possible duplicate</div>' +
+          '</div>' +
+          '<div class="text-xs text-blue-600 font-medium">Open</div>' +
+        '</div>';
+        return;
+      }
       if(it.kind === "create_contact"){
         var rowClass2 = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
         if(idx === selected){
@@ -226,6 +243,23 @@ const omnibarClientJS = `(function(){
           '<div class="flex-1">' +
             '<div class="text-sm font-medium text-gray-900">Create contact: '+escHtml(it.name)+'</div>' +
             '<div class="text-xs text-gray-500">Add a new contact record</div>' +
+          '</div>' +
+          '<div class="text-xs text-green-600 font-medium">Create</div>' +
+        '</div>';
+        return;
+      }
+      if(it.kind === "create_contact_anyway"){
+        var rowClass2b = 'flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors';
+        if(idx === selected){
+          rowClass2b = 'flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors';
+        }
+        html += '<div class="'+rowClass2b+'" data-idx="'+idx+'">' +
+          '<div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">' +
+            '<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 11H13V5h-2v6H5v2h6v6h2v-6h6v-2Z"/></svg>' +
+          '</div>' +
+          '<div class="flex-1">' +
+            '<div class="text-sm font-medium text-gray-900">Create anyway: '+escHtml(it.name)+'</div>' +
+            '<div class="text-xs text-amber-700">Possible duplicate exists</div>' +
           '</div>' +
           '<div class="text-xs text-green-600 font-medium">Create</div>' +
         '</div>';
@@ -374,6 +408,29 @@ const omnibarClientJS = `(function(){
     return out;
   }
 
+  function normalizeName(s){
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function findDuplicateContact(name, itemsList){
+    var qn = normalizeName(name);
+    if(!qn) return null;
+    for(var i=0; i<(itemsList || []).length; i++){
+      var it = itemsList[i];
+      if(!it || it.kind !== "contact") continue;
+      var cn = normalizeName(it.name);
+      if(!cn) continue;
+      if(cn === qn) return it;
+      // Lightweight "close match": starts-with and near-equal length.
+      if(cn.indexOf(qn) === 0 && Math.abs(cn.length - qn.length) <= 3) return it;
+    }
+    return null;
+  }
+
   function setItems(result){
     lastResult = result || {};
     var qNow = String(input.value || "").trim();
@@ -448,9 +505,23 @@ const omnibarClientJS = `(function(){
 
     if(!pickMode && intentNow === "contact"){
       var cname = qNow;
-      items = items.filter(function(it){ return it.kind !== "create_contact"; });
+      items = items.filter(function(it){
+        return it.kind !== "create_contact" && it.kind !== "create_contact_anyway" && it.kind !== "open_existing_contact";
+      });
       if(cname !== ""){
-        items.push({kind:"create_contact", name: cname});
+        var dup = findDuplicateContact(cname, items);
+        if(dup && dup.id){
+          items.push({
+            kind: "open_existing_contact",
+            id: dup.id,
+            name: dup.name,
+            company: dup.company || "",
+            initials: dup.initials || "?"
+          });
+          items.push({kind:"create_contact_anyway", name: cname});
+        }else{
+          items.push({kind:"create_contact", name: cname});
+        }
       }
     }
 
@@ -539,24 +610,16 @@ const omnibarClientJS = `(function(){
       window.location.href = tpath("/contacts/" + it.id);
       return;
     }
+    if(it.kind === "open_existing_contact"){
+      window.location.href = tpath("/contacts/" + it.id);
+      return;
+    }
     if(it.kind === "create_contact"){
-      var fdC = new FormData();
-      fdC.append("name", String(it.name || ""));
-      fetch(tpath("/contacts/quick"), {method:"POST", body: fdC, headers: {"Accept":"application/json"}})
-        .then(function(r){ if(!r.ok) throw new Error("bad"); return r.json(); })
-        .then(function(data){
-          if(data && data.contact && data.contact.id){
-            addTargetChip({id: data.contact.id, name: data.contact.name || it.name || "", company: data.contact.company || ""});
-          }
-          input.value = "";
-          setOpen(false);
-          panel.innerHTML = "";
-          items = [];
-          pickMode = false;
-          pickPayload = null;
-          input.focus();
-        })
-        .catch(function(){});
+      createContact(String(it.name || ""));
+      return;
+    }
+    if(it.kind === "create_contact_anyway"){
+      createContact(String(it.name || ""));
       return;
     }
     if(it.kind === "log_interaction"){
@@ -646,6 +709,26 @@ const omnibarClientJS = `(function(){
       fd.submit();
       return;
     }
+  }
+
+  function createContact(name){
+    var fdC = new FormData();
+    fdC.append("name", String(name || ""));
+    fetch(tpath("/contacts/quick"), {method:"POST", body: fdC, headers: {"Accept":"application/json"}})
+      .then(function(r){ if(!r.ok) throw new Error("bad"); return r.json(); })
+      .then(function(data){
+        if(data && data.contact && data.contact.id){
+          addTargetChip({id: data.contact.id, name: data.contact.name || name || "", company: data.contact.company || ""});
+        }
+        input.value = "";
+        setOpen(false);
+        panel.innerHTML = "";
+        items = [];
+        pickMode = false;
+        pickPayload = null;
+        input.focus();
+      })
+      .catch(function(){});
   }
 
   function fetchResults(){
