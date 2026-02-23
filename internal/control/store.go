@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -156,18 +157,18 @@ CREATE TABLE IF NOT EXISTS tenants (
   db_path TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_storage_key
-  ON tenants(storage_key)
-  WHERE storage_key != '';
 `)
 	if err != nil {
 		return fmt.Errorf("migrate control: %w", err)
 	}
-	// Older DBs won't have storage_key; add it.
-	_ = execAddColumn(db, "tenants", "storage_key TEXT NOT NULL DEFAULT ''")
-	// Ensure the unique index exists even if we added the column via ALTER.
-	_, _ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_storage_key ON tenants(storage_key) WHERE storage_key != ''`)
+	// Older DBs won't have storage_key; add it before creating the index.
+	if err := execAddColumn(db, "tenants", "storage_key TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("migrate control: %w", err)
+	}
+	// Unique index on storage_key (ignore empty default).
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_storage_key ON tenants(storage_key) WHERE storage_key != ''`); err != nil {
+		return fmt.Errorf("migrate control: %w", err)
+	}
 	return nil
 }
 
@@ -228,11 +229,14 @@ func (s *Store) ensureTenantStorageLayout() error {
 			newExists := fileExists(newPath)
 			switch {
 			case oldExists && !newExists:
-				if err := os.Rename(oldPath, newPath); err != nil {
-					return fmt.Errorf("move tenant db: %w", err)
+				if err := moveSQLiteDBFiles(oldPath, newPath, true); err != nil {
+					return err
 				}
 			case oldExists && newExists:
-				return fmt.Errorf("tenant %q has both legacy and new DB paths; refusing to overwrite", r.slug)
+				// No deployments in the wild yet; prefer the legacy DB and back up anything at the new path.
+				if err := moveSQLiteDBFiles(oldPath, newPath, true); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -247,6 +251,42 @@ func (s *Store) ensureTenantStorageLayout() error {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func moveSQLiteDBFiles(oldPath, newPath string, backupDest bool) error {
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return fmt.Errorf("mkdir tenant dir: %w", err)
+	}
+
+	backup := func(path string) error {
+		if !fileExists(path) {
+			return nil
+		}
+		if !backupDest {
+			return os.Remove(path)
+		}
+		suffix := time.Now().UTC().Format("20060102T150405Z")
+		dst := path + ".bak." + suffix
+		return os.Rename(path, dst)
+	}
+
+	for _, p := range []string{newPath, newPath + "-wal", newPath + "-shm"} {
+		if err := backup(p); err != nil {
+			return fmt.Errorf("backup existing tenant db: %w", err)
+		}
+	}
+
+	for _, suf := range []string{"", "-wal", "-shm"} {
+		src := oldPath + suf
+		if !fileExists(src) {
+			continue
+		}
+		dst := newPath + suf
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("move tenant db: %w", err)
+		}
+	}
+	return nil
 }
 
 func applyPragmas(db *sql.DB) error {
