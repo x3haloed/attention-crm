@@ -173,7 +173,13 @@ func (s *Server) handleCreateInteractionFromContact(w http.ResponseWriter, r *ht
 		s.handleContactDetailWithFlash(w, r, tenant, contactID, "Interaction creation failed: "+err.Error())
 		return
 	}
-	s.handleContactDetailWithFlash(w, r, tenant, contactID, "Interaction logged.")
+	interactionID, _ := db.LatestInteractionIDByContact(contactID)
+
+	redirect := "/t/" + tenant.Slug + "/contacts/" + strconv.FormatInt(contactID, 10) + "?flash=interaction_logged"
+	if interactionID > 0 {
+		redirect = redirect + "&hl=" + strconv.FormatInt(interactionID, 10) + "#interaction-" + strconv.FormatInt(interactionID, 10)
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func (s *Server) handleCompleteInteraction(w http.ResponseWriter, r *http.Request, tenant control.Tenant, rest string) {
