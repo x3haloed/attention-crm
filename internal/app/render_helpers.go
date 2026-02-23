@@ -2,6 +2,7 @@ package app
 
 import (
 	"attention-crm/internal/tenantdb"
+	"fmt"
 	"html/template"
 	"strconv"
 	"strings"
@@ -109,30 +110,23 @@ func attentionItemMeta(it tenantdb.Interaction, now time.Time) (bgClass, iconCla
 				bgClass = "bg-red-50 border border-red-200"
 				iconClass = "text-red-600"
 				actionText = "Act"
-				over := now.Sub(dueT)
-				if over < time.Hour {
-					meta = "Overdue by " + strconv.Itoa(int(over.Minutes())) + " minutes"
-				} else if over < 24*time.Hour {
-					meta = "Overdue by " + strconv.Itoa(int(over.Hours())) + " hours"
-				} else {
-					meta = "Overdue by " + strconv.Itoa(int(over.Hours()/24)) + " days"
-				}
+				meta = "Overdue • " + shortDuration(now.Sub(dueT))
 				return
 			}
 			until := dueT.Sub(now)
-			if until < time.Hour {
-				meta = "Due in " + strconv.Itoa(int(until.Minutes())) + " minutes"
+			if until < 30*time.Minute {
+				meta = "Due soon • " + shortDuration(until)
 				actionText = "Start"
 			} else if until < 24*time.Hour {
-				meta = "Due in " + strconv.Itoa(int(until.Hours())) + " hours"
-				actionText = "Start"
+				meta = dueLabel(it.DueAt.String, now)
+				actionText = "Review"
 			} else {
-				meta = "Due in " + strconv.Itoa(int(until.Hours()/24)) + " days"
+				meta = dueLabel(it.DueAt.String, now)
 				actionText = "Review"
 			}
 			return
 		}
-		meta = "Due: " + it.DueAt.String
+		meta = "Due • " + it.DueAt.String
 		actionText = "Act"
 	}
 	return
@@ -173,6 +167,73 @@ func dueDisplay(dueAt string, now time.Time) string {
 		}
 	}
 	return local.Format("Jan 2 at 3:04 PM")
+}
+
+func dueLabel(dueAt string, now time.Time) string {
+	t, ok := parseRFC3339(dueAt)
+	if !ok {
+		return "Due • " + dueAt
+	}
+
+	nowLocal := now.In(time.Local)
+	dueLocal := t.In(time.Local)
+
+	if dueLocal.Before(nowLocal) {
+		return "Overdue • " + shortDuration(nowLocal.Sub(dueLocal))
+	}
+
+	until := dueLocal.Sub(nowLocal)
+	if until < time.Hour {
+		return "Due soon • " + shortDuration(until)
+	}
+
+	if sameLocalDay(dueLocal, nowLocal) {
+		return "Due today • " + dueLocal.Format("3:04 PM")
+	}
+	if sameLocalDay(dueLocal, nowLocal.Add(24*time.Hour)) {
+		return "Due tomorrow • " + dueLocal.Format("3:04 PM")
+	}
+
+	if until < 7*24*time.Hour {
+		days := daysBetweenLocal(dueLocal, nowLocal)
+		if days <= 0 {
+			days = 1
+		}
+		return fmt.Sprintf("Due in %dd • %s", days, dueLocal.Format("Mon 3:04 PM"))
+	}
+
+	return "Due " + dueLocal.Format("Jan 2 • 3:04 PM")
+}
+
+func shortDuration(d time.Duration) string {
+	if d < 0 {
+		d = -d
+	}
+	if d < time.Minute {
+		return "1m"
+	}
+	if d < time.Hour {
+		mins := int((d + time.Minute - 1) / time.Minute)
+		return strconv.Itoa(mins) + "m"
+	}
+	if d < 24*time.Hour {
+		hrs := int((d + time.Hour - 1) / time.Hour)
+		return strconv.Itoa(hrs) + "h"
+	}
+	days := int((d + 24*time.Hour - 1) / (24 * time.Hour))
+	return strconv.Itoa(days) + "d"
+}
+
+func sameLocalDay(a, b time.Time) bool {
+	la := a.In(time.Local)
+	lb := b.In(time.Local)
+	return la.Year() == lb.Year() && la.YearDay() == lb.YearDay()
+}
+
+func daysBetweenLocal(future, now time.Time) int {
+	f := time.Date(future.Year(), future.Month(), future.Day(), 0, 0, 0, 0, time.Local)
+	n := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	return int(f.Sub(n).Hours() / 24)
 }
 
 func interactionIcon(interactionType, variant string) string {

@@ -60,13 +60,22 @@ func renderTenantAppBody(
 	// Needs Attention
 	b.WriteString(`<div id="needs-attention-section" class="col-span-5"><div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">`)
 	b.WriteString(`<div class="flex items-center justify-between mb-6"><h2 class="text-lg font-semibold text-gray-900">Needs Attention</h2>`)
-	b.WriteString(`<span class="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">` + strconv.Itoa(len(needsAttention)+len(needsDeals)) + `</span></div>`)
+	totalNeeds := len(needsAttention) + len(needsDeals)
+	if totalNeeds > 0 {
+		b.WriteString(`<span class="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full">` + strconv.Itoa(totalNeeds) + `</span>`)
+	} else {
+		b.WriteString(`<span class="text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">All clear</span>`)
+	}
+	b.WriteString(`</div>`)
 
 	if len(needsAttention) == 0 && len(needsDeals) == 0 {
-		b.WriteString(`<div class="text-sm text-gray-600">Nothing due right now.</div>`)
+		b.WriteString(`<div class="text-sm text-gray-700">No follow-ups or deals need attention.</div>`)
+		b.WriteString(`<div class="mt-2 text-xs text-gray-500">Use the omnibar above to log a note, call, or create a deal.</div>`)
 	} else {
-		if len(needsAttention) > 0 {
-			b.WriteString(`<div class="space-y-4">`)
+		b.WriteString(`<div class="space-y-4">`)
+		if len(needsAttention) == 0 {
+			b.WriteString(`<div class="text-sm text-gray-700">No follow-ups due.</div>`)
+		} else {
 			for _, it := range needsAttention {
 				bgClass, iconClass, meta, actionText := attentionItemMeta(it, now)
 				b.WriteString(`<div class="flex items-start space-x-3 p-3 ` + bgClass + ` rounded-lg">`)
@@ -78,13 +87,11 @@ func renderTenantAppBody(
 				b.WriteString(`<a class="text-xs font-medium hover:underline ` + iconClass + `" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(it.ContactID, 10) + `">` + template.HTMLEscapeString(actionText) + `</a>`)
 				b.WriteString(`</div>`)
 			}
-			b.WriteString(`</div>`)
 		}
+		b.WriteString(`</div>`)
 
 		if len(needsDeals) > 0 {
-			if len(needsAttention) > 0 {
-				b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100"></div>`)
-			}
+			b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100"></div>`)
 			b.WriteString(`<div class="flex items-center justify-between mb-3">`)
 			b.WriteString(`<div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Deals</div>`)
 			b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals" class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View all</a>`)
@@ -102,7 +109,7 @@ func renderTenantAppBody(
 					meta = "Next: " + snippet(d.NextStep, 64)
 				}
 				if d.NextStepDueAt.Valid && d.NextStepCompleted.Valid == false {
-					meta = meta + " • Due: " + dueDisplay(d.NextStepDueAt.String, now)
+					meta = meta + " • " + dueLabel(d.NextStepDueAt.String, now)
 				}
 				b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals/` + strconv.FormatInt(d.ID, 10) + `" class="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50">`)
 				b.WriteString(`<div class="flex items-start justify-between gap-3">`)
@@ -115,6 +122,13 @@ func renderTenantAppBody(
 				b.WriteString(`</a>`)
 			}
 			b.WriteString(`</div>`)
+		} else {
+			b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100"></div>`)
+			b.WriteString(`<div class="flex items-center justify-between mb-2">`)
+			b.WriteString(`<div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Deals</div>`)
+			b.WriteString(`<a href="/t/` + tenantSlugEsc + `/deals" class="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View all</a>`)
+			b.WriteString(`</div>`)
+			b.WriteString(`<div class="text-sm text-gray-700">No deals need attention.</div>`)
 		}
 	}
 	b.WriteString(`</div></div>`)
