@@ -22,7 +22,7 @@ func (s *Server) writeSession(w http.ResponseWriter, r *http.Request, sess sessi
 		Value:    base64.RawURLEncoding.EncodeToString([]byte(raw)),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
+		Secure:   s.isSecureRequest(r),
 		Path:     "/",
 		Expires:  time.Now().Add(24 * time.Hour),
 	}

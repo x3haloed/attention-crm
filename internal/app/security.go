@@ -27,12 +27,31 @@ func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func isSecureRequest(r *http.Request) bool {
+func (s *Server) isSecureRequest(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		return true
+
+	if !strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return false
+	}
+	if len(s.cfg.TrustedProxies) == 0 {
+		return false
+	}
+
+	remote := r.RemoteAddr
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		remote = host
+	}
+	remoteAddr, err := netip.ParseAddr(remote)
+	if err != nil {
+		return false
+	}
+	for _, pfx := range s.cfg.TrustedProxies {
+		if pfx.Contains(remoteAddr) {
+			return true
+		}
 	}
 	return false
 }
@@ -125,7 +144,7 @@ func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string
 		Value:    token,
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
+		Secure:   s.isSecureRequest(r),
 		Expires:  time.Now().Add(24 * time.Hour),
 	})
 	return token

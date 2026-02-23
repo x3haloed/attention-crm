@@ -30,7 +30,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, tenant con
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
+		Secure:   s.isSecureRequest(r),
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
@@ -39,7 +39,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request, tenant con
 		Value:    "",
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
+		Secure:   s.isSecureRequest(r),
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
