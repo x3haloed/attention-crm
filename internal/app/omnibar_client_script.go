@@ -622,9 +622,25 @@ const omnibarClientJS = `(function(){
     if(it.kind === "intent_mode"){
       var prev = String(input.value || "");
       setIntentChip(it.intent);
+      var intentKey0 = String(it.intent || "").toLowerCase();
       var lower = prev.trim().toLowerCase();
-      if(lower === String(it.intent || "").toLowerCase() || lower === (String(it.intent || "").toLowerCase() + " mode")){
+      if(lower === intentKey0 || lower === (intentKey0 + " mode")){
         input.value = "";
+      }else if(intentKey0 && lower && intentKey0.indexOf(lower) === 0 && lower.length >= 3){
+        // If the user is in the middle of typing the mode keyword (e.g. "conta" → Contact),
+        // don't keep that partial token around after committing the chip.
+        input.value = "";
+      }else if(intentKey0 && intentKey0 !== "note"){
+        // If the user typed "contact John Doe" (or similar) and then committed the mode,
+        // strip the leading mode token so the remaining input becomes the argument.
+        var re0 = new RegExp("^\\s*" + intentKey0.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&") + "(\\s+|\\s*:\\s*)", "i");
+        var tok0 = prev.trim().split(/\s+/)[0] || "";
+        if(tok0 && intentKey0.indexOf(tok0.toLowerCase()) === 0 && tok0.length >= 3){
+          var re0b = new RegExp("^\\s*" + tok0.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&") + "(\\s+|\\s*:\\s*)", "i");
+          input.value = prev.replace(re0b, "");
+        }else{
+          input.value = prev.replace(re0, "");
+        }
       }else{
         // Preserve content when committing intent for note-like scenarios.
         input.value = prev;
@@ -887,11 +903,19 @@ const omnibarClientJS = `(function(){
         var lower2 = prev2.trim().toLowerCase();
         if(lower2 === intentKey || lower2 === (intentKey + " mode")){
           input.value = "";
+        }else if(intentKey && lower2 && intentKey.indexOf(lower2) === 0 && lower2.length >= 3){
+          input.value = "";
         }else if(intentKey && intentKey !== "note"){
           // If the user typed "contact John Doe" (or similar) and used Tab to commit the mode,
           // strip the leading mode token so the remaining input becomes the argument.
           var re = new RegExp("^\\s*" + intentKey.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&") + "(\\s+|\\s*:\\s*)", "i");
-          input.value = prev2.replace(re, "");
+          var tok = prev2.trim().split(/\s+/)[0] || "";
+          if(tok && intentKey.indexOf(tok.toLowerCase()) === 0 && tok.length >= 3){
+            var re2 = new RegExp("^\\s*" + tok.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&") + "(\\s+|\\s*:\\s*)", "i");
+            input.value = prev2.replace(re2, "");
+          }else{
+            input.value = prev2.replace(re, "");
+          }
         }else{
           // Preserve note-like content when committing Note mode.
           input.value = prev2;
