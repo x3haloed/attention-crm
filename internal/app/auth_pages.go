@@ -37,7 +37,7 @@ func setupFormHTML(errText, defaultWorkspace string) template.HTML {
   if (!form) return;
 
   const b64ToBuf = (b64) => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
-  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const normalizeCreation = (pk) => {
     pk.challenge = b64ToBuf(pk.challenge);
     pk.user.id = b64ToBuf(pk.user.id);
@@ -121,7 +121,7 @@ func loginFormHTML(slug, errText string) template.HTML {
   if (!form || !status) return;
 
   const b64ToBuf = (b64) => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
-  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const normalizeAssertion = (pk) => {
     pk.challenge = b64ToBuf(pk.challenge);
     if (pk.allowCredentials) pk.allowCredentials = pk.allowCredentials.map(c => ({...c, id: b64ToBuf(c.id)}));
@@ -215,7 +215,7 @@ func inviteRedeemHTML(slug, email, token string) template.HTML {
   const token = "` + template.HTMLEscapeString(token) + `";
 
   const b64ToBuf = (b64) => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
-  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const normalizeCreation = (pk) => {
     pk.challenge = b64ToBuf(pk.challenge);
     pk.user.id = b64ToBuf(pk.user.id);
