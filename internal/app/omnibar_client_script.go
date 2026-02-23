@@ -573,6 +573,26 @@ const omnibarClientJS = `(function(){
       }
     }
 
+    if(!pickMode && !intentNow){
+      // Chipless create-contact suggestion should also surface a lightweight duplicate intercept.
+      // If the server suggests "Create contact", show "Open existing" + "Create anyway" when
+      // an exact/close match exists in the current results list.
+      var createIdx = -1;
+      for(var ci = 0; ci < items.length; ci++){
+        if(items[ci] && items[ci].kind === "create_contact"){ createIdx = ci; break; }
+      }
+      if(createIdx >= 0){
+        var cname2 = String(items[createIdx].name || qNow || "").trim();
+        var dup2 = findDuplicateContact(cname2, items);
+        if(dup2 && dup2.id){
+          items.splice(createIdx, 1,
+            {kind:"open_existing_contact", id: dup2.id, name: dup2.name, company: dup2.company || "", initials: dup2.initials || "?"},
+            {kind:"create_contact_anyway", name: cname2}
+          );
+        }
+      }
+    }
+
     // If the server provided explicit note actions, ensure they're prominent (avoid "Create contact" stealing Enter).
     if(!pickMode && !intentNow){
       var firstActionIdx = -1;
@@ -863,10 +883,17 @@ const omnibarClientJS = `(function(){
         e.preventDefault();
         var prev2 = String(input.value || "");
         setIntentChip(itTab.intent);
+        var intentKey = String(itTab.intent || "").toLowerCase();
         var lower2 = prev2.trim().toLowerCase();
-        if(lower2 === String(itTab.intent || "").toLowerCase() || lower2 === (String(itTab.intent || "").toLowerCase() + " mode")){
+        if(lower2 === intentKey || lower2 === (intentKey + " mode")){
           input.value = "";
+        }else if(intentKey && intentKey !== "note"){
+          // If the user typed "contact John Doe" (or similar) and used Tab to commit the mode,
+          // strip the leading mode token so the remaining input becomes the argument.
+          var re = new RegExp("^\\s*" + intentKey.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&") + "(\\s+|\\s*:\\s*)", "i");
+          input.value = prev2.replace(re, "");
         }else{
+          // Preserve note-like content when committing Note mode.
           input.value = prev2;
         }
         setOpen(false);
