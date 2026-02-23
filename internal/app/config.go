@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 type Config struct {
 	ListenAddr          string
 	DataDir             string
+	PublicOrigin        string
 	WebAuthnRPID        string
 	WebAuthnName        string
 	WebAuthnOrigins     []string
@@ -40,9 +42,18 @@ func ConfigFromEnv() Config {
 		dataDir = filepath.Join(".attention", "data")
 	}
 
+	publicOrigin := strings.TrimSpace(os.Getenv("ATTENTION_PUBLIC_ORIGIN"))
+
 	rpID := os.Getenv("ATTENTION_WEBAUTHN_RPID")
 	if rpID == "" {
-		rpID = "localhost"
+		if publicOrigin != "" {
+			if u, err := url.Parse(publicOrigin); err == nil && u.Hostname() != "" {
+				rpID = u.Hostname()
+			}
+		}
+		if rpID == "" {
+			rpID = "localhost"
+		}
 	}
 	rpName := os.Getenv("ATTENTION_WEBAUTHN_RP_NAME")
 	if rpName == "" {
@@ -50,6 +61,9 @@ func ConfigFromEnv() Config {
 	}
 	originsEnv := os.Getenv("ATTENTION_WEBAUTHN_ORIGINS")
 	origins := []string{"http://localhost:8080"}
+	if originsEnv == "" && publicOrigin != "" {
+		origins = []string{publicOrigin}
+	}
 	if originsEnv != "" {
 		parts := strings.Split(originsEnv, ",")
 		origins = origins[:0]
@@ -90,6 +104,7 @@ func ConfigFromEnv() Config {
 	return Config{
 		ListenAddr:          listen,
 		DataDir:             dataDir,
+		PublicOrigin:        publicOrigin,
 		WebAuthnRPID:        rpID,
 		WebAuthnName:        rpName,
 		WebAuthnOrigins:     origins,

@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,6 +17,31 @@ import (
 
 func main() {
 	cfg := app.ConfigFromEnv()
+
+	listen := flag.String("listen", "", "listen address (host:port), overrides ATTENTION_LISTEN_ADDR/PORT")
+	dataDir := flag.String("data-dir", "", "data directory for control DB/session key/tenant DBs, overrides ATTENTION_DATA_DIR")
+	publicOrigin := flag.String("public-origin", "", "public origin (e.g. https://crm.example.com); used for WebAuthn defaults, overrides ATTENTION_PUBLIC_ORIGIN")
+	flag.Parse()
+
+	if strings.TrimSpace(*listen) != "" {
+		cfg.ListenAddr = strings.TrimSpace(*listen)
+	}
+	if strings.TrimSpace(*dataDir) != "" {
+		cfg.DataDir = strings.TrimSpace(*dataDir)
+	}
+	if strings.TrimSpace(*publicOrigin) != "" {
+		cfg.PublicOrigin = strings.TrimSpace(*publicOrigin)
+		// Public origin is the most common single-value WebAuthn deployment config.
+		// If explicitly set by flag, prefer it over any implicit defaults.
+		cfg.WebAuthnOrigins = []string{cfg.PublicOrigin}
+		// If RPID is still a localhost default, derive from the origin host.
+		if cfg.WebAuthnRPID == "localhost" {
+			if u, err := url.Parse(cfg.PublicOrigin); err == nil && u.Hostname() != "" {
+				cfg.WebAuthnRPID = u.Hostname()
+			}
+		}
+	}
+
 	server, err := app.NewServer(cfg)
 	if err != nil {
 		log.Fatalf("init server: %v", err)
