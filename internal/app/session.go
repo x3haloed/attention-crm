@@ -27,8 +27,8 @@ func (s *Server) writeSession(w http.ResponseWriter, r *http.Request, sess sessi
 		Expires:  time.Now().Add(24 * time.Hour),
 	}
 	http.SetCookie(w, cookie)
-	s.ensureCSRFCookie(w, r)
-	return nil
+	_, err := s.ensureCSRFCookie(w, r)
+	return err
 }
 
 func (s *Server) readSession(r *http.Request) (session, bool) {

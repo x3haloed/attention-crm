@@ -20,7 +20,11 @@ func (s *Server) handleExportPage(w http.ResponseWriter, r *http.Request, tenant
 	}
 
 	body := renderExportBody(tenant)
-	csrf := s.ensureCSRFCookie(w, r)
+	csrf, err := s.ensureCSRFCookie(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     "Export",
 		OmniBar:   renderOmniBar(tenant, "", "header"),

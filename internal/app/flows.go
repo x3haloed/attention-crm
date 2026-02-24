@@ -1,14 +1,16 @@
 package app
 
 import (
-	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"time"
 )
 
-func (s *Server) storeFlow(flow ceremonyFlow) string {
+func (s *Server) storeFlow(flow ceremonyFlow) (string, error) {
 	token := make([]byte, 24)
-	_, _ = rand.Read(token)
+	if _, err := cryptoRandRead(token); err != nil {
+		return "", fmt.Errorf("could not generate flow token: %w", err)
+	}
 	id := base64.RawURLEncoding.EncodeToString(token)
 
 	s.flowMu.Lock()
@@ -20,7 +22,7 @@ func (s *Server) storeFlow(flow ceremonyFlow) string {
 		}
 	}
 	s.webauthnFlow[id] = flow
-	return id
+	return id, nil
 }
 
 func (s *Server) consumeFlow(flowID string) (ceremonyFlow, bool) {

@@ -32,7 +32,11 @@ func (s *Server) handleMembersPage(w http.ResponseWriter, r *http.Request, tenan
 	}
 
 	body := renderMembersBody(tenant, sess.UserID, members, invites)
-	csrf := s.ensureCSRFCookie(w, r)
+	csrf, err := s.ensureCSRFCookie(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     "Members",
 		OmniBar:   renderOmniBar(tenant, "", "header"),

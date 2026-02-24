@@ -53,7 +53,11 @@ func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant c
 	}
 
 	body := renderDealDeskBody(tenant, deal, targets, events, "")
-	csrf := s.ensureCSRFCookie(w, r)
+	csrf, err := s.ensureCSRFCookie(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     "Deal",
 		OmniBar:   renderOmniBar(tenant, "", "header"),

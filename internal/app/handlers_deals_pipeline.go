@@ -31,7 +31,11 @@ func (s *Server) handleDealsPipeline(w http.ResponseWriter, r *http.Request, ten
 
 	header := renderDealsPipelineHeader(tenant)
 	body := renderDealsPipelineBody(tenant, rows)
-	csrf := s.ensureCSRFCookie(w, r)
+	csrf, err := s.ensureCSRFCookie(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
 		Title:     "Deals",
 		Header:    header,

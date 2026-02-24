@@ -151,7 +151,14 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	if !s.allowRate(r, "omni|"+tenant.Slug, 20, 60) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return
+	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if n := len([]rune(q)); n > 512 {
+		q = string([]rune(q)[:512])
+	}
 	if q == "" {
 		s.writeJSON(w, http.StatusOK, omniResponseV2{
 			Version:  2,

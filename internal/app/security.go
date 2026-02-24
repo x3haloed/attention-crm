@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"golang.org/x/time/rate"
 	"net"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"time"
 )
+
+var cryptoRandRead = rand.Read
 
 func (s *Server) bodyLimitMiddleware(next http.Handler) http.Handler {
 	maxBytes := s.cfg.MaxRequestBodyBytes
@@ -146,17 +149,25 @@ func (s *Server) allowRate(r *http.Request, bucket string, perSecond float64, bu
 	return lim.Allow()
 }
 
-func randomTokenB64(n int) string {
+func randomTokenB64(n int) (string, error) {
+	if n <= 0 {
+		return "", errors.New("token size must be positive")
+	}
 	buf := make([]byte, n)
-	_, _ = rand.Read(buf)
-	return base64.RawURLEncoding.EncodeToString(buf)
+	if _, err := cryptoRandRead(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string {
+func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 	if c, err := r.Cookie("attention_csrf"); err == nil && c.Value != "" {
-		return c.Value
+		return c.Value, nil
 	}
-	token := randomTokenB64(32)
+	token, err := randomTokenB64(32)
+	if err != nil {
+		return "", err
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "attention_csrf",
 		Value:    token,
@@ -165,7 +176,7 @@ func (s *Server) ensureCSRFCookie(w http.ResponseWriter, r *http.Request) string
 		Secure:   s.isSecureRequest(r),
 		Expires:  time.Now().Add(24 * time.Hour),
 	})
-	return token
+	return token, nil
 }
 
 func (s *Server) requireCSRF(w http.ResponseWriter, r *http.Request) bool {

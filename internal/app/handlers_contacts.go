@@ -158,7 +158,11 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 
 	header := renderContactHeader(tenant, contact)
 	body := renderContactDetailBody(tenant, contact, deals, timeline, flash, highlightInteractionID)
-	csrf := s.ensureCSRFCookie(w, r)
+	csrf, err := s.ensureCSRFCookie(w, r)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	title := strings.TrimSpace(contact.Name)
 	if title == "" {
 		title = strings.TrimSpace(contact.Email)

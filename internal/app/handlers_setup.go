@@ -91,12 +91,16 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	flowID := s.storeFlow(ceremonyFlow{
+	flowID, err := s.storeFlow(ceremonyFlow{
 		TenantSlug: tenant.Slug,
 		UserID:     user.ID,
 		Session:    *sessionData,
 		ExpiresAt:  time.Now().UTC().Add(10 * time.Minute),
 	})
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"flow_id":     flowID,

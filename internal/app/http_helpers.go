@@ -11,7 +11,8 @@ func parseMaybeMultipartForm(r *http.Request) error {
 	// Our auth flows submit using fetch(FormData), which defaults to multipart/form-data.
 	// Calling ParseForm first will *not* parse multipart bodies but will initialize r.Form,
 	// which prevents FormValue from later calling ParseMultipartForm.
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	// Keep maxMemory small; total request size is already capped by MaxBytesReader middleware.
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		if errors.Is(err, http.ErrNotMultipart) {
 			return r.ParseForm()
 		}
