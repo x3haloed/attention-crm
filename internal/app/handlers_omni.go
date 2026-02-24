@@ -166,7 +166,7 @@ func (s *Server) handleOmni(w http.ResponseWriter, r *http.Request, tenant contr
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -267,7 +267,7 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -342,7 +342,7 @@ func (s *Server) handleQuickCreateDeal(w http.ResponseWriter, r *http.Request, t
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -356,7 +356,7 @@ func (s *Server) handleQuickCreateDeal(w http.ResponseWriter, r *http.Request, t
 		s.handleApp(w, r, tenant, appViewState{Flash: "Deal creation failed: " + err.Error()})
 		return
 	}
-	_ = db.CreateDealEvent(dealID, "system", "Created from omnibar.")
+	_ = db.CreateDealEventBy(sess.UserID, dealID, "system", "Created from omnibar.")
 
 	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }

@@ -50,7 +50,7 @@ func (s *Server) handleQuickCreateInteraction(w http.ResponseWriter, r *http.Req
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -59,7 +59,7 @@ func (s *Server) handleQuickCreateInteraction(w http.ResponseWriter, r *http.Req
 		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: contact does not exist."})
 		return
 	}
-	if err := db.CreateInteraction(contactID, interactionType, content, dueAt); err != nil {
+	if err := db.CreateInteractionBy(sess.UserID, contactID, interactionType, content, dueAt); err != nil {
 		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: " + err.Error()})
 		return
 	}
@@ -109,7 +109,7 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request,
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -118,7 +118,7 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request,
 		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: contact does not exist."})
 		return
 	}
-	if err := db.CreateInteraction(contactID, interactionType, content, dueAt); err != nil {
+	if err := db.CreateInteractionBy(sess.UserID, contactID, interactionType, content, dueAt); err != nil {
 		s.handleApp(w, r, tenant, appViewState{Flash: "Interaction creation failed: " + err.Error()})
 		return
 	}
@@ -159,7 +159,7 @@ func (s *Server) handleCreateInteractionFromContact(w http.ResponseWriter, r *ht
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -168,7 +168,7 @@ func (s *Server) handleCreateInteractionFromContact(w http.ResponseWriter, r *ht
 		s.handleContactDetailWithFlash(w, r, tenant, contactID, "Contact not found.")
 		return
 	}
-	if err := db.CreateInteraction(contactID, interactionType, content, dueAt); err != nil {
+	if err := db.CreateInteractionBy(sess.UserID, contactID, interactionType, content, dueAt); err != nil {
 		s.handleContactDetailWithFlash(w, r, tenant, contactID, "Interaction creation failed: "+err.Error())
 		return
 	}
@@ -201,12 +201,12 @@ func (s *Server) handleCompleteInteraction(w http.ResponseWriter, r *http.Reques
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
-	if err := db.MarkInteractionComplete(interactionID); err != nil {
+	if err := db.MarkInteractionCompleteBy(sess.UserID, interactionID); err != nil {
 		s.handleApp(w, r, tenant, appViewState{Flash: "Could not complete interaction: " + err.Error()})
 		return
 	}

@@ -43,7 +43,7 @@ func TestCreateInteractionTouchesContactUpdatedAt(t *testing.T) {
 	}
 
 	due := time.Now().Add(2 * time.Hour)
-	if err := store.CreateInteraction(contactID, "note", "Called and left a message", &due); err != nil {
+	if err := store.CreateInteractionBy(1, contactID, "note", "Called and left a message", &due); err != nil {
 		t.Fatalf("CreateInteraction: %v", err)
 	}
 
@@ -53,6 +53,14 @@ func TestCreateInteractionTouchesContactUpdatedAt(t *testing.T) {
 	}
 	if after.UpdatedAt == before.UpdatedAt {
 		t.Fatalf("expected updated_at to change; still %q", after.UpdatedAt)
+	}
+
+	timeline, err := store.ListInteractionsByContact(contactID, 10)
+	if err != nil || len(timeline) == 0 {
+		t.Fatalf("ListInteractionsByContact: err=%v len=%d", err, len(timeline))
+	}
+	if !timeline[0].CreatedBy.Valid || timeline[0].CreatedBy.String != "Owner" {
+		t.Fatalf("expected interaction CreatedBy=Owner; got %+v", timeline[0].CreatedBy)
 	}
 }
 
@@ -252,7 +260,7 @@ func TestDealsCRUDNextStepCloseAndEvents(t *testing.T) {
 	if _, err := store.db.Exec(`UPDATE deals SET last_activity_at = '2000-01-01T00:00:00Z' WHERE id = ?`, dealID); err != nil {
 		t.Fatalf("seed last_activity_at: %v", err)
 	}
-	if err := store.CreateDealEvent(dealID, "note", "Talked budget"); err != nil {
+	if err := store.CreateDealEventBy(1, dealID, "note", "Talked budget"); err != nil {
 		t.Fatalf("CreateDealEvent: %v", err)
 	}
 	afterEvent, _, err := store.DealByID(dealID)
@@ -265,6 +273,9 @@ func TestDealsCRUDNextStepCloseAndEvents(t *testing.T) {
 	events, err := store.ListDealEvents(dealID, 10)
 	if err != nil || len(events) == 0 {
 		t.Fatalf("ListDealEvents: err=%v len=%d", err, len(events))
+	}
+	if !events[0].CreatedBy.Valid || events[0].CreatedBy.String != "Owner" {
+		t.Fatalf("expected deal event CreatedBy=Owner; got %+v", events[0].CreatedBy)
 	}
 
 	if _, err := store.CloseDeal(dealID, "won", "Signed the contract"); err != nil {

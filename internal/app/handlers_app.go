@@ -14,29 +14,29 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
 	contacts, err := db.ContactOptions()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	needsAttention, err := db.ListNeedsAttention(50)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	needsDeals, err := db.ListDealsNeedsAttention(20)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	recent, err := db.ListRecentInteractions(50)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 

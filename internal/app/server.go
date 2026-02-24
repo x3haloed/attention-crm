@@ -123,12 +123,12 @@ func (s *Server) ensureDevFixture() error {
 	if len(sarah) == 1 {
 		contactID := sarah[0].ID
 		recent, _ := db.ListRecentInteractions(1)
-		if len(recent) == 0 {
-			due := time.Now().Add(2 * time.Hour)
-			_ = db.CreateInteraction(contactID, "call", "Follow up call scheduled", &due)
-			_ = db.CreateInteraction(contactID, "note", "Called about Q1 budget planning", nil)
+			if len(recent) == 0 {
+				due := time.Now().Add(2 * time.Hour)
+				_ = db.CreateInteractionBy(1, contactID, "call", "Follow up call scheduled", &due)
+				_ = db.CreateInteractionBy(1, contactID, "note", "Called about Q1 budget planning", nil)
+			}
 		}
-	}
 
 	return nil
 }

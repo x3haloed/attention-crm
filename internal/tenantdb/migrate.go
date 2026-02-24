@@ -100,9 +100,13 @@ CREATE TABLE IF NOT EXISTS interactions (
   content TEXT NOT NULL,
   due_at TEXT,
   completed_at TEXT,
+  created_by_user_id INTEGER,
+  updated_by_user_id INTEGER,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
-  FOREIGN KEY(contact_id) REFERENCES contacts(id)
+  FOREIGN KEY(contact_id) REFERENCES contacts(id),
+  FOREIGN KEY(created_by_user_id) REFERENCES users(id),
+  FOREIGN KEY(updated_by_user_id) REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_interactions_workspace_created
@@ -155,9 +159,13 @@ CREATE TABLE IF NOT EXISTS deal_events (
   deal_id INTEGER NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('note','call','email','meeting','system')),
   content TEXT NOT NULL,
+  created_by_user_id INTEGER,
+  updated_by_user_id INTEGER,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
-  FOREIGN KEY(deal_id) REFERENCES deals(id) ON DELETE CASCADE
+  FOREIGN KEY(deal_id) REFERENCES deals(id) ON DELETE CASCADE,
+  FOREIGN KEY(created_by_user_id) REFERENCES users(id),
+  FOREIGN KEY(updated_by_user_id) REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_deal_events_deal_created
@@ -201,6 +209,10 @@ CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user
 	_ = execAddColumn(db, "invites", "redeem_started_at TEXT")
 	_ = execAddColumn(db, "invites", "redeem_user_id INTEGER")
 	_ = execAddColumn(db, "invites", "revoked_at TEXT")
+	_ = execAddColumn(db, "interactions", "created_by_user_id INTEGER")
+	_ = execAddColumn(db, "interactions", "updated_by_user_id INTEGER")
+	_ = execAddColumn(db, "deal_events", "created_by_user_id INTEGER")
+	_ = execAddColumn(db, "deal_events", "updated_by_user_id INTEGER")
 	return nil
 }
 

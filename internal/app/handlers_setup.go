@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"net/http"
@@ -15,7 +16,7 @@ func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
 	}
 	count, err := s.control.TenantCount()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	if count > 0 {
@@ -39,7 +40,7 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 	}
 	count, err := s.control.TenantCount()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	if count > 0 {
@@ -64,7 +65,7 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -77,7 +78,7 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 
 	waUser, err := db.WebAuthnUserByID(user.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -86,7 +87,7 @@ func (s *Server) handleSetupPasskeyStart(w http.ResponseWriter, r *http.Request)
 		UserVerification: protocol.VerificationRequired,
 	}))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -130,7 +131,7 @@ func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request
 	}
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -147,11 +148,11 @@ func (s *Server) handleSetupPasskeyFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := db.AddWebAuthnCredential(user.ID, credential); err != nil {
-		http.Error(w, "credential save failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("credential save failed"))
 		return
 	}
 	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
-		http.Error(w, "set session failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("set session failed"))
 		return
 	}
 

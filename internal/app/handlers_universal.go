@@ -30,7 +30,7 @@ func (s *Server) handleUniversalInput(w http.ResponseWriter, r *http.Request, te
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -64,7 +64,7 @@ func (s *Server) handleUniversalInput(w http.ResponseWriter, r *http.Request, te
 
 	matches, err := db.SearchContacts(query, 10)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	if len(matches) == 1 && strings.EqualFold(strings.TrimSpace(matches[0].Name), query) {

@@ -20,7 +20,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /setup/passkey/finish", s.handleSetupPasskeyFinish)
 	mux.HandleFunc("GET /t/", s.handleTenantRoute)
 	mux.HandleFunc("POST /t/", s.handleTenantRoute)
-	return loggingMiddleware(s.securityHeadersMiddleware(s.bodyLimitMiddleware(mux)))
+	return s.requestIDMiddleware(s.loggingMiddleware(s.securityHeadersMiddleware(s.bodyLimitMiddleware(mux))))
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +30,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	count, err := s.control.TenantCount()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -58,7 +58,7 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -79,6 +79,14 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleOmni(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/app":
 		s.handleApp(w, r, tenant, appViewState{})
+	case r.Method == http.MethodGet && rest == "/export":
+		s.handleExportPage(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/export/contacts.csv":
+		s.handleExportContactsCSV(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/export/interactions.csv":
+		s.handleExportInteractionsCSV(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/export/deals.csv":
+		s.handleExportDealsCSV(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/contacts":
 		s.handleCreateContact(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/contacts/quick":

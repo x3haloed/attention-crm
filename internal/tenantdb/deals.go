@@ -398,6 +398,10 @@ WHERE workspace_id = ? AND id = ? AND state = 'open'
 }
 
 func (s *Store) CreateDealEvent(dealID int64, eventType, content string) error {
+	return s.CreateDealEventBy(0, dealID, eventType, content)
+}
+
+func (s *Store) CreateDealEventBy(actorUserID int64, dealID int64, eventType, content string) error {
 	eventType = strings.TrimSpace(strings.ToLower(eventType))
 	switch eventType {
 	case "note", "call", "email", "meeting", "system":
@@ -421,9 +425,13 @@ func (s *Store) CreateDealEvent(dealID int64, eventType, content string) error {
 	}
 	defer tx.Rollback()
 
+	var actor any
+	if actorUserID > 0 {
+		actor = actorUserID
+	}
 	if _, err := tx.Exec(
-		`INSERT INTO deal_events(workspace_id, deal_id, type, content, created_at) VALUES(?, ?, ?, ?, ?)`,
-		workspaceID, dealID, eventType, content, now,
+		`INSERT INTO deal_events(workspace_id, deal_id, type, content, created_by_user_id, updated_by_user_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		workspaceID, dealID, eventType, content, actor, actor, now,
 	); err != nil {
 		return err
 	}
@@ -446,10 +454,16 @@ func (s *Store) ListDealEvents(dealID int64, limit int) ([]DealEvent, error) {
 		return nil, err
 	}
 	rows, err := s.db.Query(`
-SELECT id, deal_id, type, content, created_at
-FROM deal_events
-WHERE workspace_id = ? AND deal_id = ?
-ORDER BY created_at DESC, id DESC
+SELECT
+  e.id, e.deal_id, e.type, e.content,
+  e.created_by_user_id, uc.name,
+  e.updated_by_user_id, uu.name,
+  e.created_at
+FROM deal_events e
+LEFT JOIN users uc ON uc.id = e.created_by_user_id
+LEFT JOIN users uu ON uu.id = e.updated_by_user_id
+WHERE e.workspace_id = ? AND e.deal_id = ?
+ORDER BY e.created_at DESC, e.id DESC
 LIMIT ?
 `, workspaceID, dealID, limit)
 	if err != nil {
@@ -459,7 +473,12 @@ LIMIT ?
 	var out []DealEvent
 	for rows.Next() {
 		var ev DealEvent
-		if err := rows.Scan(&ev.ID, &ev.DealID, &ev.Type, &ev.Content, &ev.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&ev.ID, &ev.DealID, &ev.Type, &ev.Content,
+			&ev.CreatedByID, &ev.CreatedBy,
+			&ev.UpdatedByID, &ev.UpdatedBy,
+			&ev.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, ev)

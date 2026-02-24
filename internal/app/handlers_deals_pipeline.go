@@ -18,14 +18,14 @@ func (s *Server) handleDealsPipeline(w http.ResponseWriter, r *http.Request, ten
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
 	rows, err := db.ListDealsPipeline(200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 

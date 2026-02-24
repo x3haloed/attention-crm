@@ -47,11 +47,12 @@ func main() {
 	}
 
 	httpServer := &http.Server{
-		Addr:         cfg.ListenAddr,
-		Handler:      server.Router(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 20 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:           cfg.ListenAddr,
+		Handler:        server.Router(),
+		MaxHeaderBytes: 1 << 20,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   20 * time.Second,
+		IdleTimeout:    60 * time.Second,
 	}
 
 	go func() {

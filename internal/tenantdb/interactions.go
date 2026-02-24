@@ -8,6 +8,10 @@ import (
 )
 
 func (s *Store) CreateInteraction(contactID int64, interactionType, content string, dueAt *time.Time) error {
+	return s.CreateInteractionBy(0, contactID, interactionType, content, dueAt)
+}
+
+func (s *Store) CreateInteractionBy(actorUserID int64, contactID int64, interactionType, content string, dueAt *time.Time) error {
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {
 		return err
@@ -33,10 +37,14 @@ func (s *Store) CreateInteraction(contactID int64, interactionType, content stri
 	}
 	defer tx.Rollback()
 
+	var actor any
+	if actorUserID > 0 {
+		actor = actorUserID
+	}
 	_, err = tx.Exec(`
-INSERT INTO interactions(workspace_id, contact_id, type, content, due_at)
-VALUES(?,?,?,?,?)
-`, workspaceID, contactID, interactionType, content, dueAtStr)
+INSERT INTO interactions(workspace_id, contact_id, type, content, due_at, created_by_user_id, updated_by_user_id)
+VALUES(?,?,?,?,?,?,?)
+`, workspaceID, contactID, interactionType, content, dueAtStr, actor, actor)
 	if err != nil {
 		return err
 	}
@@ -62,9 +70,16 @@ func (s *Store) ListRecentInteractions(limit int) ([]Interaction, error) {
 		return nil, err
 	}
 	rows, err := s.db.Query(`
-SELECT i.id, i.contact_id, c.name, i.type, i.content, i.due_at, i.completed_at, i.created_at
+SELECT
+  i.id, i.contact_id, c.name,
+  i.type, i.content, i.due_at, i.completed_at,
+  i.created_by_user_id, uc.name,
+  i.updated_by_user_id, uu.name,
+  i.created_at
 FROM interactions i
 JOIN contacts c ON c.id = i.contact_id
+LEFT JOIN users uc ON uc.id = i.created_by_user_id
+LEFT JOIN users uu ON uu.id = i.updated_by_user_id
 WHERE i.workspace_id = ?
 ORDER BY i.created_at DESC, i.id DESC
 LIMIT ?
@@ -77,7 +92,13 @@ LIMIT ?
 	var out []Interaction
 	for rows.Next() {
 		var it Interaction
-		if err := rows.Scan(&it.ID, &it.ContactID, &it.ContactName, &it.Type, &it.Content, &it.DueAt, &it.CompletedAt, &it.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&it.ID, &it.ContactID, &it.ContactName,
+			&it.Type, &it.Content, &it.DueAt, &it.CompletedAt,
+			&it.CreatedByID, &it.CreatedBy,
+			&it.UpdatedByID, &it.UpdatedBy,
+			&it.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, it)
@@ -95,9 +116,16 @@ func (s *Store) ListNeedsAttention(limit int) ([]Interaction, error) {
 	}
 
 	rows, err := s.db.Query(`
-SELECT i.id, i.contact_id, c.name, i.type, i.content, i.due_at, i.completed_at, i.created_at
+SELECT
+  i.id, i.contact_id, c.name,
+  i.type, i.content, i.due_at, i.completed_at,
+  i.created_by_user_id, uc.name,
+  i.updated_by_user_id, uu.name,
+  i.created_at
 FROM interactions i
 JOIN contacts c ON c.id = i.contact_id
+LEFT JOIN users uc ON uc.id = i.created_by_user_id
+LEFT JOIN users uu ON uu.id = i.updated_by_user_id
 WHERE i.workspace_id = ?
   AND i.due_at IS NOT NULL
   AND i.completed_at IS NULL
@@ -112,7 +140,13 @@ LIMIT ?
 	var out []Interaction
 	for rows.Next() {
 		var it Interaction
-		if err := rows.Scan(&it.ID, &it.ContactID, &it.ContactName, &it.Type, &it.Content, &it.DueAt, &it.CompletedAt, &it.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&it.ID, &it.ContactID, &it.ContactName,
+			&it.Type, &it.Content, &it.DueAt, &it.CompletedAt,
+			&it.CreatedByID, &it.CreatedBy,
+			&it.UpdatedByID, &it.UpdatedBy,
+			&it.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, it)
@@ -121,6 +155,10 @@ LIMIT ?
 }
 
 func (s *Store) MarkInteractionComplete(interactionID int64) error {
+	return s.MarkInteractionCompleteBy(0, interactionID)
+}
+
+func (s *Store) MarkInteractionCompleteBy(actorUserID int64, interactionID int64) error {
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {
 		return err
@@ -140,11 +178,15 @@ func (s *Store) MarkInteractionComplete(interactionID int64) error {
 		return err
 	}
 
+	var actor any
+	if actorUserID > 0 {
+		actor = actorUserID
+	}
 	res, err := tx.Exec(`
 UPDATE interactions
-SET completed_at = ?
+SET completed_at = ?, updated_by_user_id = COALESCE(?, updated_by_user_id)
 WHERE id = ? AND workspace_id = ? AND completed_at IS NULL
-`, time.Now().UTC().Format(time.RFC3339), interactionID, workspaceID)
+`, time.Now().UTC().Format(time.RFC3339), actor, interactionID, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -176,9 +218,16 @@ func (s *Store) ListInteractionsByContact(contactID int64, limit int) ([]Interac
 		return nil, err
 	}
 	rows, err := s.db.Query(`
-SELECT i.id, i.contact_id, c.name, i.type, i.content, i.due_at, i.completed_at, i.created_at
+SELECT
+  i.id, i.contact_id, c.name,
+  i.type, i.content, i.due_at, i.completed_at,
+  i.created_by_user_id, uc.name,
+  i.updated_by_user_id, uu.name,
+  i.created_at
 FROM interactions i
 JOIN contacts c ON c.id = i.contact_id
+LEFT JOIN users uc ON uc.id = i.created_by_user_id
+LEFT JOIN users uu ON uu.id = i.updated_by_user_id
 WHERE i.workspace_id = ? AND i.contact_id = ?
 ORDER BY i.created_at DESC, i.id DESC
 LIMIT ?
@@ -191,7 +240,13 @@ LIMIT ?
 	var out []Interaction
 	for rows.Next() {
 		var it Interaction
-		if err := rows.Scan(&it.ID, &it.ContactID, &it.ContactName, &it.Type, &it.Content, &it.DueAt, &it.CompletedAt, &it.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&it.ID, &it.ContactID, &it.ContactName,
+			&it.Type, &it.Content, &it.DueAt, &it.CompletedAt,
+			&it.CreatedByID, &it.CreatedBy,
+			&it.UpdatedByID, &it.UpdatedBy,
+			&it.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

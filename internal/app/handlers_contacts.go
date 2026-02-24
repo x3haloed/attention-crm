@@ -34,7 +34,7 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, ten
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -97,7 +97,7 @@ func (s *Server) handleUpdateContact(w http.ResponseWriter, r *http.Request, ten
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -127,7 +127,7 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -139,13 +139,13 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 	}
 	timeline, err := db.ListInteractionsByContact(contactID, 200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
 	deals, err := db.ListDealsByContact(contactID, 50)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 

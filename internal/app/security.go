@@ -220,9 +220,3 @@ func requireSameOrigin(w http.ResponseWriter, r *http.Request) bool {
 	http.Error(w, "forbidden", http.StatusForbidden)
 	return false
 }
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
-}

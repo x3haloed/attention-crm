@@ -153,7 +153,11 @@ func renderContactDetailBody(
 		if desc != "" {
 			b.WriteString(`<p class="text-xs text-gray-600 mt-1">` + template.HTMLEscapeString(snippet(desc, 200)) + `</p>`)
 		}
-		b.WriteString(`<p class="text-xs text-gray-500 mt-2">` + template.HTMLEscapeString(meta) + `</p>`)
+		metaText := meta
+		if it.CreatedBy.Valid && strings.TrimSpace(it.CreatedBy.String) != "" {
+			metaText = metaText + " • by " + strings.TrimSpace(it.CreatedBy.String)
+		}
+		b.WriteString(`<p class="text-xs text-gray-500 mt-2">` + template.HTMLEscapeString(metaText) + `</p>`)
 		b.WriteString(`</div>`)
 		if action != "" {
 			b.WriteString(action)

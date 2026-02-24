@@ -28,7 +28,7 @@ func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant c
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -40,7 +40,7 @@ func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant c
 	}
 	events, err := db.ListDealEvents(dealID, 200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (s *Server) handleDealUpdateNextStep(w http.ResponseWriter, r *http.Request
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -106,7 +106,7 @@ func (s *Server) handleDealUpdateNextStep(w http.ResponseWriter, r *http.Request
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 		return
 	}
-	_ = db.CreateDealEvent(dealID, "system", "Updated next step.")
+	_ = db.CreateDealEventBy(sess.UserID, dealID, "system", "Updated next step.")
 	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }
 
@@ -126,12 +126,12 @@ func (s *Server) handleDealCompleteNextStep(w http.ResponseWriter, r *http.Reque
 	}
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 	_, _ = db.CompleteDealNextStep(dealID)
-	_ = db.CreateDealEvent(dealID, "system", "Completed next step.")
+	_ = db.CreateDealEventBy(sess.UserID, dealID, "system", "Completed next step.")
 	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }
 
@@ -157,12 +157,12 @@ func (s *Server) handleDealCreateEvent(w http.ResponseWriter, r *http.Request, t
 	content := strings.TrimSpace(r.FormValue("content"))
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
-	_ = db.CreateDealEvent(dealID, typ, content)
+	_ = db.CreateDealEventBy(sess.UserID, dealID, typ, content)
 	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }
 
@@ -189,13 +189,13 @@ func (s *Server) handleDealClose(w http.ResponseWriter, r *http.Request, tenant 
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
 	if _, err := db.CloseDeal(dealID, state, outcome); err == nil {
-		_ = db.CreateDealEvent(dealID, "system", "Closed "+strings.ToUpper(state)+": "+outcome)
+		_ = db.CreateDealEventBy(sess.UserID, dealID, "system", "Closed "+strings.ToUpper(state)+": "+outcome)
 	}
 	http.Redirect(w, r, "/t/"+tenant.Slug+"/deals/"+strconv.FormatInt(dealID, 10), http.StatusSeeOther)
 }

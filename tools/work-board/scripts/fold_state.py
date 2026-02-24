@@ -57,12 +57,16 @@ def fold(root: Path) -> dict[str, Any]:
     ledger_path = root / ".isnad" / "ledger.jsonl"
     control_path = root / ".isnad" / "control.jsonl"
 
+    ledger_bytes = int(ledger_path.stat().st_size) if ledger_path.exists() else 0
+    control_bytes = int(control_path.stat().st_size) if control_path.exists() else 0
+
     cards: dict[str, Card] = {}
     unread_directives: dict[str, list[str]] = {}
     acked_directives: set[str] = set()
     last_ack_directive_id: str | None = None
     last_ack_directive_ts: str | None = None
     last_ack_control_seq = 0
+    last_seen_control_seq = 0
 
     # First pass: evidence defines tasks and receipts/snapshots.
     for rec in read_jsonl(ledger_path):
@@ -105,6 +109,7 @@ def fold(root: Path) -> dict[str, Any]:
         d_type = d.get("type")
         ts = d.get("ts", "")
         seq = int(d.get("_seq", 0) or 0)
+        last_seen_control_seq = max(last_seen_control_seq, seq)
         task_id = d.get("task_id")
         payload = d.get("payload") if isinstance(d.get("payload"), dict) else {}
 
@@ -188,6 +193,9 @@ def fold(root: Path) -> dict[str, Any]:
         "last_ack_directive_id": last_ack_directive_id,
         "last_ack_directive_ts": last_ack_directive_ts,
         "last_ack_control_seq": last_ack_control_seq,
+        "last_seen_control_seq": last_seen_control_seq,
+        "folded_control_bytes": control_bytes,
+        "folded_ledger_bytes": ledger_bytes,
     }
 
 
@@ -226,11 +234,24 @@ def main() -> int:
     out_dir = root / ".isnad" / "state"
     out_json = out_dir / "board.json"
     out_md = out_dir / "board.md"
+    out_cursors = out_dir / "cursors.json"
     write_json(out_json, board)
     out_md.write_text(render_markdown(board), encoding="utf-8")
+    write_json(
+        out_cursors,
+        {
+            "generated_at": board.get("generated_at", ""),
+            "control_ack_cursor": board.get("last_ack_directive_id"),
+            "last_seen_control_seq": board.get("last_seen_control_seq", 0),
+            "last_ack_control_seq": board.get("last_ack_control_seq", 0),
+            "folded_control_bytes": board.get("folded_control_bytes", 0),
+            "folded_ledger_bytes": board.get("folded_ledger_bytes", 0),
+        },
+    )
 
     print(f"[OK] Wrote {out_json}")
     print(f"[OK] Wrote {out_md}")
+    print(f"[OK] Wrote {out_cursors}")
     return 0
 
 

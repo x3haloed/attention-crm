@@ -15,19 +15,19 @@ func (s *Server) handleMembersPage(w http.ResponseWriter, r *http.Request, tenan
 	}
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
 
 	members, err := db.ListMembers(200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	invites, err := db.ListInvites(200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 
@@ -58,7 +58,7 @@ func (s *Server) handleRevokeInvite(w http.ResponseWriter, r *http.Request, tena
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -91,7 +91,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request, tena
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()

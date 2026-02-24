@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 )
 
@@ -23,4 +24,14 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (s *Server) internalError(w http.ResponseWriter, r *http.Request, err error) {
+	id := requestID(r)
+	if err != nil {
+		log.Printf("internal_error rid=%s method=%s path=%s err=%v", id, r.Method, r.URL.Path, err)
+	} else {
+		log.Printf("internal_error rid=%s method=%s path=%s", id, r.Method, r.URL.Path)
+	}
+	http.Error(w, "internal error (request_id="+id+")", http.StatusInternalServerError)
 }

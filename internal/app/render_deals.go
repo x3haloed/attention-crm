@@ -129,10 +129,14 @@ func renderDealDeskBody(tenant control.Tenant, deal tenantdb.Deal, targets []ten
 			b.WriteString(`<div class="min-w-0 flex-1">`)
 			b.WriteString(`<div class="flex items-center justify-between gap-3">`)
 			b.WriteString(`<div class="text-sm font-medium text-gray-900">` + template.HTMLEscapeString(label) + `</div>`)
-			b.WriteString(`<div class="text-xs text-gray-500">` + template.HTMLEscapeString(relativeTime(ev.CreatedAt, now)) + `</div>`)
-			b.WriteString(`</div>`)
-			b.WriteString(`<div class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">` + template.HTMLEscapeString(ev.Content) + `</div>`)
-			b.WriteString(`</div>`)
+				when := relativeTime(ev.CreatedAt, now)
+				if ev.CreatedBy.Valid && strings.TrimSpace(ev.CreatedBy.String) != "" {
+					when = when + " • by " + strings.TrimSpace(ev.CreatedBy.String)
+				}
+				b.WriteString(`<div class="text-xs text-gray-500">` + template.HTMLEscapeString(when) + `</div>`)
+				b.WriteString(`</div>`)
+				b.WriteString(`<div class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">` + template.HTMLEscapeString(ev.Content) + `</div>`)
+				b.WriteString(`</div>`)
 			b.WriteString(`</div>`)
 		}
 		b.WriteString(`</div>`)

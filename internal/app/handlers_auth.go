@@ -70,7 +70,7 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -87,7 +87,7 @@ func (s *Server) handleLoginPasskeyStart(w http.ResponseWriter, r *http.Request,
 
 	options, sessionData, err := s.webauthn.BeginLogin(user, webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
-		http.Error(w, "could not start login: "+err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	flowID := s.storeFlow(ceremonyFlow{
@@ -126,7 +126,7 @@ func (s *Server) handleLoginPasskeyDiscoverableStart(w http.ResponseWriter, r *h
 
 	options, sessionData, err := s.webauthn.BeginDiscoverableLogin(webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err != nil {
-		http.Error(w, "could not start login: "+err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	flowID := s.storeFlow(ceremonyFlow{
@@ -163,7 +163,7 @@ func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -191,12 +191,12 @@ func (s *Server) handleLoginPasskeyDiscoverableFinish(w http.ResponseWriter, r *
 
 	typed, ok := u.(tenantdb.WebAuthnUser)
 	if !ok {
-		http.Error(w, "could not resolve user", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("could not resolve user"))
 		return
 	}
 
 	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: typed.ID}); err != nil {
-		http.Error(w, "set session failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("set session failed"))
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
@@ -225,7 +225,7 @@ func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -240,7 +240,7 @@ func (s *Server) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
-		http.Error(w, "set session failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("set session failed"))
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
@@ -256,7 +256,7 @@ func (s *Server) handleInvitePage(w http.ResponseWriter, r *http.Request, tenant
 	}
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -299,7 +299,7 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -311,7 +311,7 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 	}
 	waUser, err := db.WebAuthnUserByID(user.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	options, sessionData, err := s.webauthn.BeginRegistration(waUser, webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
@@ -319,7 +319,7 @@ func (s *Server) handleInvitePasskeyStart(w http.ResponseWriter, r *http.Request
 		UserVerification: protocol.VerificationRequired,
 	}))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	flowID := s.storeFlow(ceremonyFlow{
@@ -361,7 +361,7 @@ func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Reques
 
 	db, err := s.openTenantDB(tenant.DBPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		s.internalError(w, r, err)
 		return
 	}
 	defer db.Close()
@@ -377,7 +377,7 @@ func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := db.AddWebAuthnCredential(user.ID, credential); err != nil {
-		http.Error(w, "credential save failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("credential save failed"))
 		return
 	}
 	if err := db.CompleteInviteRedemption(token, user.ID); err != nil {
@@ -385,7 +385,7 @@ func (s *Server) handleInvitePasskeyFinish(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := s.writeSession(w, r, session{TenantSlug: tenant.Slug, UserID: user.ID}); err != nil {
-		http.Error(w, "set session failed", http.StatusInternalServerError)
+		s.internalError(w, r, errors.New("set session failed"))
 		return
 	}
 

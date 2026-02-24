@@ -64,6 +64,10 @@ type Interaction struct {
 	Content     string
 	DueAt       sql.NullString
 	CompletedAt sql.NullString
+	CreatedByID sql.NullInt64
+	CreatedBy   sql.NullString
+	UpdatedByID sql.NullInt64
+	UpdatedBy   sql.NullString
 	CreatedAt   string
 }
 
@@ -94,11 +98,15 @@ type DealPipelineRow struct {
 }
 
 type DealEvent struct {
-	ID        int64
-	DealID    int64
-	Type      string
-	Content   string
-	CreatedAt string
+	ID          int64
+	DealID      int64
+	Type        string
+	Content     string
+	CreatedByID sql.NullInt64
+	CreatedBy   sql.NullString
+	UpdatedByID sql.NullInt64
+	UpdatedBy   sql.NullString
+	CreatedAt   string
 }
 
 type Invite struct {
