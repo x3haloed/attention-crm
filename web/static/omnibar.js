@@ -1,6 +1,4 @@
-package app
-
-const omnibarClientJS = `(function(){
+(function(){
   var input = document.getElementById("omni-input");
   var form = document.getElementById("omni-form");
   var card = document.getElementById("omni-card");
@@ -1117,4 +1115,4 @@ const omnibarClientJS = `(function(){
     render();
     activate(idx);
   });
-})();`
+})();

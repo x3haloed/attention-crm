@@ -38,10 +38,13 @@ func renderOmniBar(tenant control.Tenant, value, variant string) template.HTML {
 	b.WriteString(`<div id="search-suggestions" class="mt-4 space-y-1 border-t border-gray-100 pt-4 hidden"></div>`)
 	b.WriteString(`</div></div></div>`)
 
-	// Client-side omnibar palette (intentionally embedded to keep the app single-binary/self-host friendly).
-	b.WriteString("<script>\n")
-	b.WriteString(omnibarClientJS)
-	b.WriteString("\n</script>")
+	// Client-side omnibar palette served as a static asset (still embedded in the single binary via web.StaticFS).
+	v := strings.TrimSpace(BuildCommit)
+	if v == "" {
+		v = strings.TrimSpace(BuildVersion)
+	}
+	vEsc := template.HTMLEscapeString(v)
+	b.WriteString(`<script src="/static/omnibar.js?v=` + vEsc + `"></script>`)
 
 	return template.HTML(b.String())
 }
