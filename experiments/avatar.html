@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LLM Avatar PoC (SVG)</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: #0b0d12;
+      color: #d9dde7;
+    }
+    .wrap {
+      width: min(860px, 94vw);
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+    }
+    .card {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.04);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.18);
+      font-size: 13px;
+      user-select: none;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #6ee7ff;
+      box-shadow: 0 0 0 3px rgba(110,231,255,0.18);
+    }
+    .dot.idle { background: #9aa4b2; box-shadow: 0 0 0 3px rgba(154,164,178,0.15); }
+    .dot.typing { background: #6ee7ff; box-shadow: 0 0 0 3px rgba(110,231,255,0.18); }
+    .hint {
+      opacity: 0.8;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06);
+    }
+    svg { width: 100%; height: auto; display: block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <!-- Avatar SVG -->
+      <svg id="avatar" viewBox="0 0 900 420" role="img" aria-label="LLM avatar with eyes and keyboard">
+        <defs>
+          <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/>
+          </filter>
+
+          <linearGradient id="deskGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#101521"/>
+            <stop offset="1" stop-color="#0b0d12"/>
+          </linearGradient>
+
+          <linearGradient id="botGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2a3448"/>
+            <stop offset="1" stop-color="#1a2232"/>
+          </linearGradient>
+
+          <linearGradient id="screenGlow" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#6ee7ff" stop-opacity="0.18"/>
+            <stop offset="1" stop-color="#9b8bff" stop-opacity="0.10"/>
+          </linearGradient>
+
+          <clipPath id="eyeClipL">
+            <ellipse cx="355" cy="170" rx="58" ry="48"/>
+          </clipPath>
+          <clipPath id="eyeClipR">
+            <ellipse cx="545" cy="170" rx="58" ry="48"/>
+          </clipPath>
+        </defs>
+
+        <!-- background desk -->
+        <rect x="0" y="0" width="900" height="420" fill="url(#deskGrad)"/>
+        <rect x="0" y="290" width="900" height="140" fill="#070910" opacity="0.9"/>
+
+        <!-- subtle monitor glow -->
+        <rect x="110" y="56" width="680" height="250" rx="22" fill="url(#screenGlow)" opacity="1"/>
+
+        <!-- desk line -->
+        <path d="M120 292 H780" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+        <!-- Avatar (bot) -->
+        <g id="bot" filter="url(#softShadow)">
+          <!-- body -->
+          <path d="M280 290
+                   C280 235 320 210 360 210
+                   H540
+                   C580 210 620 235 620 290
+                   Z"
+                fill="url(#botGrad)" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+          <!-- head -->
+          <rect x="250" y="70" width="400" height="190" rx="70"
+                fill="url(#botGrad)" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+          <!-- face panel -->
+          <rect x="275" y="92" width="350" height="150" rx="55"
+                fill="rgba(0,0,0,0.22)" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+          <!-- eyes sockets -->
+          <ellipse cx="355" cy="170" rx="62" ry="52" fill="rgba(255,255,255,0.05)"/>
+          <ellipse cx="545" cy="170" rx="62" ry="52" fill="rgba(255,255,255,0.05)"/>
+
+          <!-- Eyes (whites) -->
+          <ellipse cx="355" cy="170" rx="58" ry="48" fill="#e9eef6" opacity="0.95"/>
+          <ellipse cx="545" cy="170" rx="58" ry="48" fill="#e9eef6" opacity="0.95"/>
+
+          <!-- Pupils/irises clipped to eye whites -->
+          <g clip-path="url(#eyeClipL)">
+            <g id="pupilL">
+              <circle cx="355" cy="170" r="22" fill="#182235"/>
+              <circle cx="355" cy="170" r="12" fill="#0b0f18"/>
+              <circle cx="346" cy="160" r="5" fill="#ffffff" opacity="0.9"/>
+            </g>
+          </g>
+          <g clip-path="url(#eyeClipR)">
+            <g id="pupilR">
+              <circle cx="545" cy="170" r="22" fill="#182235"/>
+              <circle cx="545" cy="170" r="12" fill="#0b0f18"/>
+              <circle cx="536" cy="160" r="5" fill="#ffffff" opacity="0.9"/>
+            </g>
+          </g>
+
+          <!-- eyelids (simple blink) -->
+          <g id="lids">
+            <rect id="lidL" x="297" y="122" width="116" height="0" rx="18" fill="#1a2232" opacity="0.95"/>
+            <rect id="lidR" x="487" y="122" width="116" height="0" rx="18" fill="#1a2232" opacity="0.95"/>
+          </g>
+
+          <!-- tiny mouth / status notch -->
+          <path d="M425 215 Q450 228 475 215" stroke="rgba(255,255,255,0.25)" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+          <!-- antenna nub -->
+          <path d="M450 56 V40" stroke="rgba(255,255,255,0.20)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="450" cy="36" r="6" fill="#6ee7ff" opacity="0.85"/>
+        </g>
+
+        <!-- Keyboard -->
+        <g id="keyboard">
+          <rect x="230" y="300" width="440" height="88" rx="18"
+                fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+          <rect x="255" y="322" width="390" height="46" rx="12"
+                fill="rgba(0,0,0,0.25)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+          <!-- keys -->
+          <g id="keys" opacity="0.95">
+            <!-- row 1 -->
+            <g transform="translate(270,332)">
+              <rect class="key" x="0"   y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="42"  y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="84"  y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="126" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="168" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="210" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="252" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="294" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="336" y="0" width="34" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+            </g>
+
+            <!-- row 2 -->
+            <g transform="translate(282,352)">
+              <rect class="key" x="0"   y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="50"  y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="100" y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="150" y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="200" y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="250" y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+              <rect class="key" x="300" y="0" width="40" height="14" rx="4" fill="rgba(255,255,255,0.07)"/>
+            </g>
+
+            <!-- space -->
+            <g transform="translate(350,372)">
+              <rect id="spaceKey" x="0" y="0" width="200" height="12" rx="6" fill="rgba(255,255,255,0.08)"/>
+            </g>
+          </g>
+
+          <!-- typing indicator -->
+          <g id="typingIndicator" opacity="0">
+            <rect x="685" y="308" width="92" height="28" rx="14" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+            <circle id="tDot1" cx="710" cy="322" r="4" fill="#6ee7ff" opacity="0.9"/>
+            <circle id="tDot2" cx="731" cy="322" r="4" fill="#6ee7ff" opacity="0.6"/>
+            <circle id="tDot3" cx="752" cy="322" r="4" fill="#6ee7ff" opacity="0.3"/>
+            <text x="772" y="326" font-size="12" fill="rgba(255,255,255,0.70)">typing</text>
+          </g>
+        </g>
+      </svg>
+
+      <!-- UI -->
+      <div class="row">
+        <div class="pill"><span id="stateDot" class="dot idle"></span><span id="stateText">idle (eyes down)</span></div>
+        <div class="hint">
+          Move mouse: eyes track cursor · Stop moving: eyes return to keyboard · Toggle typing: <kbd>T</kbd>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const svg = document.getElementById("avatar");
+  const pupilL = document.getElementById("pupilL");
+  const pupilR = document.getElementById("pupilR");
+  const lidL = document.getElementById("lidL");
+  const lidR = document.getElementById("lidR");
+  const typingIndicator = document.getElementById("typingIndicator");
+  const spaceKey = document.getElementById("spaceKey");
+
+  const stateDot = document.getElementById("stateDot");
+  const stateText = document.getElementById("stateText");
+
+  // Eye centers in SVG coords
+  const eyeL = { x: 355, y: 170 };
+  const eyeR = { x: 545, y: 170 };
+
+  // Default "look down at keyboard" target in SVG coords
+  const keyboardFocus = { x: 450, y: 345 };
+
+  // Pupil constraints (max offset inside eye)
+  const maxOffset = 16;
+
+  // Track mouse activity
+  let lastMouseMoveAt = 0;
+  const mouseActiveWindowMs = 650;
+  let mouseSvg = { x: keyboardFocus.x, y: keyboardFocus.y };
+
+  // Typing state
+  let typing = false;
+
+  // Animation state
+  let currentTarget = { x: keyboardFocus.x, y: keyboardFocus.y };
+  let smoothTarget = { x: keyboardFocus.x, y: keyboardFocus.y };
+  let pupilOffset = { x: 0, y: 0 };
+
+  // Blink
+  let nextBlinkAt = performance.now() + rand(1200, 4200);
+  let blinkPhase = 0; // 0 idle, 1 closing, 2 opening
+  let blinkT = 0;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function setUI() {
+    const mouseActive = (performance.now() - lastMouseMoveAt) < mouseActiveWindowMs;
+    const mode = mouseActive ? "tracking cursor" : "eyes down";
+    const label = (typing ? "typing" : "idle") + " (" + mode + ")";
+    stateText.textContent = label;
+
+    stateDot.classList.toggle("typing", typing);
+    stateDot.classList.toggle("idle", !typing);
+
+    typingIndicator.style.opacity = typing ? "1" : "0";
+  }
+
+  // Convert client coords to SVG viewBox coords
+  function clientToSvg(clientX, clientY) {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: keyboardFocus.x, y: keyboardFocus.y };
+    const inv = ctm.inverse();
+    const sp = pt.matrixTransform(inv);
+    return { x: sp.x, y: sp.y };
+  }
+
+  window.addEventListener("mousemove", (e) => {
+    lastMouseMoveAt = performance.now();
+    mouseSvg = clientToSvg(e.clientX, e.clientY);
+  }, { passive: true });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "t" || e.key === "T") {
+      typing = !typing;
+      setUI();
+    }
+  });
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function updateEyes(dt) {
+    const mouseActive = (performance.now() - lastMouseMoveAt) < mouseActiveWindowMs;
+    currentTarget = mouseActive ? mouseSvg : keyboardFocus;
+
+    // Smooth the target so eyes don't snap
+    const follow = mouseActive ? 0.16 : 0.10;
+    smoothTarget.x = lerp(smoothTarget.x, currentTarget.x, 1 - Math.pow(1 - follow, dt * 60));
+    smoothTarget.y = lerp(smoothTarget.y, currentTarget.y, 1 - Math.pow(1 - follow, dt * 60));
+
+    // Compute desired pupil offset based on midpoint between eyes
+    const mid = { x: (eyeL.x + eyeR.x) / 2, y: (eyeL.y + eyeR.y) / 2 };
+    let dx = smoothTarget.x - mid.x;
+    let dy = smoothTarget.y - mid.y;
+
+    // Normalize to maxOffset (soft clamp)
+    const dist = Math.hypot(dx, dy) || 1;
+    const scale = Math.min(1, (maxOffset / dist));
+    dx *= scale;
+    dy *= scale;
+
+    // Ease pupil offset
+    const ease = 0.22;
+    pupilOffset.x = lerp(pupilOffset.x, dx, 1 - Math.pow(1 - ease, dt * 60));
+    pupilOffset.y = lerp(pupilOffset.y, dy, 1 - Math.pow(1 - ease, dt * 60));
+
+    // Apply transforms
+    pupilL.setAttribute("transform", `translate(${pupilOffset.x},${pupilOffset.y})`);
+    pupilR.setAttribute("transform", `translate(${pupilOffset.x},${pupilOffset.y})`);
+  }
+
+  function updateBlink(dt) {
+    const now = performance.now();
+    if (blinkPhase === 0 && now >= nextBlinkAt) {
+      blinkPhase = 1;
+      blinkT = 0;
+    }
+
+    if (blinkPhase === 0) {
+      lidL.setAttribute("height", "0");
+      lidR.setAttribute("height", "0");
+      return;
+    }
+
+    // Simple close/open timing
+    const closeDur = 0.08;
+    const openDur  = 0.10;
+
+    if (blinkPhase === 1) {
+      blinkT += dt;
+      const t = clamp(blinkT / closeDur, 0, 1);
+      const h = lerp(0, 70, t);
+      lidL.setAttribute("height", String(h));
+      lidR.setAttribute("height", String(h));
+      if (t >= 1) { blinkPhase = 2; blinkT = 0; }
+    } else if (blinkPhase === 2) {
+      blinkT += dt;
+      const t = clamp(blinkT / openDur, 0, 1);
+      const h = lerp(70, 0, t);
+      lidL.setAttribute("height", String(h));
+      lidR.setAttribute("height", String(h));
+      if (t >= 1) {
+        blinkPhase = 0;
+        nextBlinkAt = now + rand(1600, 5200);
+      }
+    }
+  }
+
+  function updateTyping(dt, time) {
+    if (!typing) {
+      // reset key/indicator animation
+      spaceKey.setAttribute("transform", "");
+      // reset indicator dots
+      document.getElementById("tDot1").setAttribute("opacity", "0.9");
+      document.getElementById("tDot2").setAttribute("opacity", "0.6");
+      document.getElementById("tDot3").setAttribute("opacity", "0.3");
+      return;
+    }
+
+    // Subtle rhythmic key press (space bar)
+    const press = (Math.sin(time * 0.012) + 1) / 2; // 0..1
+    const down = lerp(0, 3, press);
+    spaceKey.setAttribute("transform", `translate(0,${down})`);
+
+    // Typing dots pulse
+    const p1 = (Math.sin(time * 0.010) + 1) / 2;
+    const p2 = (Math.sin(time * 0.010 + 1.2) + 1) / 2;
+    const p3 = (Math.sin(time * 0.010 + 2.4) + 1) / 2;
+    document.getElementById("tDot1").setAttribute("opacity", (0.25 + 0.75 * p1).toFixed(2));
+    document.getElementById("tDot2").setAttribute("opacity", (0.25 + 0.75 * p2).toFixed(2));
+    document.getElementById("tDot3").setAttribute("opacity", (0.25 + 0.75 * p3).toFixed(2));
+  }
+
+  let last = performance.now();
+  function frame(time) {
+    const dt = Math.min(0.033, (time - last) / 1000);
+    last = time;
+
+    updateEyes(dt);
+    updateBlink(dt);
+    updateTyping(dt, time);
+    setUI();
+
+    requestAnimationFrame(frame);
+  }
+
+  setUI();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

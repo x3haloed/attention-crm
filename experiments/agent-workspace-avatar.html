@@ -1,0 +1,292 @@
+<html>
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script> window.FontAwesomeConfig = { autoReplaceSvg: 'nest'};</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        ::-webkit-scrollbar { display: none;}
+        body { font-family: 'Inter', sans-serif; }
+        
+        @keyframes blink {
+            0%, 90% { opacity: 1; }
+            95% { opacity: 0; }
+        }
+        
+        @keyframes typing {
+            0%, 100% { width: 0; }
+            50% { width: 100%; }
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+        
+        @keyframes lookDown {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(2px) scale(1.02); }
+        }
+        
+        .avatar-normal {
+            animation: bounce 3s ease-in-out infinite;
+        }
+        
+        .avatar-focused {
+            animation: lookDown 0.3s ease-out forwards;
+        }
+        
+        .typing-animation {
+            animation: typing 2s ease-in-out infinite;
+            white-space: nowrap;
+            overflow: hidden;
+            border-right: 2px solid #3b82f6;
+        }
+        
+        .typing-paused {
+            animation-play-state: paused;
+        }
+        
+        .cursor-blink {
+            animation: blink 1s infinite;
+        }
+        
+        .email-draft {
+            transition: all 0.3s ease;
+        }
+        
+        .email-paused {
+            opacity: 0.7;
+            filter: grayscale(20%);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+    
+    <!-- AI Agent Avatar Section -->
+    <div id="avatar-section" class="bg-white shadow-sm border-b border-gray-200 p-4 sm:p-6">
+        <div class="flex items-center justify-center">
+            <div class="relative">
+                <div id="agent-avatar" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full avatar-normal overflow-hidden border-4 border-blue-100">
+                    <img class="w-full h-full object-cover" src="https://storage.googleapis.com/uxpilot-auth.appspot.com/442ca3ec1e-7b5a72c50c84478400d7.png" alt="friendly AI assistant robot avatar with glowing blue eyes, modern minimalist style" />
+                </div>
+                <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                    <div class="w-2 h-2 bg-white rounded-full cursor-blink"></div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-3">
+            <h2 class="text-lg sm:text-xl font-semibold text-gray-800">AI Writing Assistant</h2>
+            <p class="text-sm text-gray-500 mt-1">Helping you draft the perfect email</p>
+        </div>
+    </div>
+
+    <!-- Email Drafting Animation Section -->
+    <div id="email-section" class="flex-1 p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-indigo-50 overflow-auto">
+        <div class="max-w-4xl mx-auto">
+            <div id="email-draft" class="bg-white rounded-lg shadow-lg border border-gray-200 email-draft">
+                <!-- Email Header -->
+                <div class="border-b border-gray-200 p-4 sm:p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-800">New Email Draft</h3>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full cursor-blink"></div>
+                            <span class="text-sm text-blue-600 font-medium">AI Writing...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <label class="text-sm font-medium text-gray-600 w-16">To:</label>
+                            <div class="flex-1 text-gray-800">john.doe@company.com</div>
+                        </div>
+                        <div class="flex items-center">
+                            <label class="text-sm font-medium text-gray-600 w-16">Subject:</label>
+                            <div id="subject-line" class="flex-1 text-gray-800 typing-animation">Project Update and Next Steps</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Email Body -->
+                <div class="p-4 sm:p-6">
+                    <div class="prose max-w-none">
+                        <p class="text-gray-700 mb-4">Dear John,</p>
+                        
+                        <p id="email-content" class="text-gray-700 mb-4 typing-animation">
+                            I hope this email finds you well. I wanted to provide you with an update on our current project status and outline the next steps moving forward.
+                        </p>
+                        
+                        <div class="space-y-3 text-gray-700">
+                            <p><strong>Current Progress:</strong></p>
+                            <ul class="list-disc pl-6 space-y-1">
+                                <li>Completed initial research phase</li>
+                                <li>Finalized project specifications</li>
+                                <li>Assembled the development team</li>
+                            </ul>
+                            
+                            <p class="mt-4"><strong>Next Steps:</strong></p>
+                            <ul class="list-disc pl-6 space-y-1">
+                                <li>Begin development phase next week</li>
+                                <li>Schedule weekly progress meetings</li>
+                                <li>Set up project tracking dashboard</li>
+                            </ul>
+                        </div>
+                        
+                        <p class="text-gray-700 mt-4">Best regards,<br>Your AI Assistant</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Message Input Section -->
+    <div id="message-section" class="bg-white border-t border-gray-200 p-4 sm:p-6">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-end space-x-3">
+                <div class="flex-1">
+                    <label for="user-message" class="block text-sm font-medium text-gray-700 mb-2">Your message</label>
+                    <div class="relative">
+                        <textarea 
+                            id="user-message" 
+                            rows="3" 
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200"
+                            placeholder="Type your message or instructions for the AI..."
+                        ></textarea>
+                        <div class="absolute bottom-3 right-3 flex items-center space-x-2">
+                            <button class="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                                <i class="fa-solid fa-paperclip text-sm"></i>
+                            </button>
+                            <button class="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                                <i class="fa-solid fa-microphone text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <button id="send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors duration-200 flex items-center space-x-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span class="hidden sm:inline">Send</span>
+                </button>
+            </div>
+            
+            <div class="flex items-center justify-between mt-3">
+                <div class="flex items-center space-x-4 text-sm text-gray-500">
+                    <span><i class="fa-solid fa-magic-wand-sparkles mr-1"></i>AI Enhanced</span>
+                    <span><i class="fa-solid fa-shield-check mr-1"></i>Secure</span>
+                </div>
+                <div class="text-xs text-gray-400">
+                    Press Enter to send
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const userMessage = document.getElementById('user-message');
+            const agentAvatar = document.getElementById('agent-avatar');
+            const emailDraft = document.getElementById('email-draft');
+            const subjectLine = document.getElementById('subject-line');
+            const emailContent = document.getElementById('email-content');
+            const sendButton = document.getElementById('send-button');
+            
+            let isMessageFocused = false;
+            
+            // Handle focus on message input
+            userMessage.addEventListener('focus', function() {
+                if (!isMessageFocused) {
+                    isMessageFocused = true;
+                    
+                    // Change avatar animation to look down
+                    agentAvatar.classList.remove('avatar-normal');
+                    agentAvatar.classList.add('avatar-focused');
+                    
+                    // Pause email drafting animation
+                    emailDraft.classList.add('email-paused');
+                    subjectLine.classList.add('typing-paused');
+                    emailContent.classList.add('typing-paused');
+                }
+            });
+            
+            // Handle blur on message input
+            userMessage.addEventListener('blur', function() {
+                setTimeout(() => {
+                    if (document.activeElement !== userMessage) {
+                        isMessageFocused = false;
+                        
+                        // Return avatar to normal animation
+                        agentAvatar.classList.remove('avatar-focused');
+                        agentAvatar.classList.add('avatar-normal');
+                        
+                        // Resume email drafting animation
+                        emailDraft.classList.remove('email-paused');
+                        subjectLine.classList.remove('typing-paused');
+                        emailContent.classList.remove('typing-paused');
+                    }
+                }, 100);
+            });
+            
+            // Handle Enter key to send message
+            userMessage.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Handle send button click
+            sendButton.addEventListener('click', sendMessage);
+            
+            function sendMessage() {
+                const message = userMessage.value.trim();
+                if (message) {
+                    // Add a subtle animation to show message sent
+                    sendButton.classList.add('scale-95');
+                    setTimeout(() => {
+                        sendButton.classList.remove('scale-95');
+                        userMessage.value = '';
+                        userMessage.blur();
+                    }, 150);
+                }
+            }
+        });
+    </script>
+
+  <script>
+    (function() {
+      function blockEvent(e) {
+        if (!e) return false;
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        return false;
+      }
+
+      // Block all anchor navigations (including http(s), mailto, tel, hash, fragments)
+      document.addEventListener('click', function(e) {
+        var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        return blockEvent(e);
+      }, true);
+
+      // Neutralize programmatic navigation attempts
+      try { window.open = function() { return null }; } catch (_) {}
+      try {
+        var noop = function(){};
+        history.pushState = noop;
+        history.replaceState = noop;
+      } catch (_) {}
+      try {
+        if (window.location) {
+          window.location.assign = function(){};
+          window.location.replace = function(){};
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+</html>
