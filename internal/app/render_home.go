@@ -26,9 +26,6 @@ func renderTenantAppBody(
 		b.WriteString(`<div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">` + template.HTMLEscapeString(state.Flash) + `</div>`)
 	}
 
-	// Universal action surface.
-	b.WriteString(string(renderOmniBar(tenant, state.UniversalText, "home")))
-
 	// Possible duplicates (kept, but styled in the new system).
 	if len(state.Duplicates) > 0 {
 		b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">`)
@@ -47,8 +44,16 @@ func renderTenantAppBody(
 		b.WriteString(`</div></div>`)
 	}
 
+	// Home split layout: left dashboard (2/3) + right rail (1/3 placeholder).
+	// Inline grid columns ensure this works even if Tailwind CSS has not been rebuilt yet.
+	b.WriteString(`<div id="home-split-grid" class="grid gap-6 mt-6" style="grid-template-columns: 2fr 1fr;">`)
+	b.WriteString(`<div id="home-main-column">`)
+
+	// Universal action surface (kept in left 2/3 column).
+	b.WriteString(string(renderOmniBar(tenant, state.UniversalText, "home")))
+
 	// Quick capture section.
-	b.WriteString(`<div id="quick-capture-section" class="mt-6"><div class="grid grid-cols-4 gap-4">`)
+	b.WriteString(`<div id="quick-capture-section"><div class="grid grid-cols-4 gap-4">`)
 	b.WriteString(quickCaptureButton("New Contact", "Add person or company", "hover:border-blue-300 hover:bg-blue-50", "bg-blue-100", "group-hover:bg-blue-200", "text-blue-600", "M12 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm-7 14c0-3.314 2.686-6 6-6h2c3.314 0 6 2.686 6 6v1H5v-1Zm13-6v-2h2V9h-2V7h-2v2h-2v2h2v2h2Z", "contact"))
 	b.WriteString(quickCaptureButton("Log Call", "Record conversation", "hover:border-green-300 hover:bg-green-50", "bg-green-100", "group-hover:bg-green-200", "text-green-600", "M6.62 10.79a15.053 15.053 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.59a1 1 0 0 1-.24 1.01l-2.21 2.19Z", "call"))
 	b.WriteString(quickCaptureButton("Quick Note", "Capture thoughts", "hover:border-yellow-300 hover:bg-yellow-50", "bg-yellow-100", "group-hover:bg-yellow-200", "text-yellow-600", "M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 1.5V8h4.5L14 3.5Z", "note"))
@@ -162,6 +167,291 @@ func renderTenantAppBody(
 	b.WriteString(`</div></div>`)
 
 	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<style>
+		@keyframes agent-cursor-blink { 0%, 90% { opacity: 1; } 95% { opacity: 0; } }
+		@keyframes agent-typing-reveal { 0%, 100% { width: 0; } 50% { width: 100%; } }
+		.agent-cursor-blink { animation: agent-cursor-blink 1s infinite; }
+		.agent-typing-animation {
+			animation: agent-typing-reveal 2.4s ease-in-out infinite;
+			white-space: nowrap;
+			overflow: hidden;
+			border-right: 2px solid rgb(59 130 246);
+		}
+		.agent-typing-paused { animation-play-state: paused; border-right-color: transparent; }
+	</style>`)
+
+	// Right rail: agent workspace scaffold (static layout only).
+	b.WriteString(`<aside id="home-right-rail">`)
+	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">`)
+	b.WriteString(`<div class="flex flex-col" style="min-height: calc(100vh - 9rem);">`)
+	b.WriteString(`<div class="p-6 border-b border-gray-200">`)
+	b.WriteString(`<div class="flex flex-col items-center text-center">`)
+	b.WriteString(`<div id="agent-avatar-host" class="w-56 h-56">`)
+	b.WriteString(`<img src="/static/cute-chibi.svg?v=eyes-v2" alt="Chibi agent avatar" class="w-56 h-56 object-contain">`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="p-6 flex-1 min-h-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">`)
+	b.WriteString(`<div class="bg-white border border-gray-200 rounded-xl w-full max-w-md shadow-sm overflow-hidden">`)
+	b.WriteString(`<div class="border-b border-gray-200 p-4">`)
+	b.WriteString(`<div class="flex items-center justify-between gap-3 mb-3">`)
+	b.WriteString(`<h3 class="text-sm font-semibold text-gray-900">New Email Draft</h3>`)
+	b.WriteString(`<div class="flex items-center gap-2">`)
+	b.WriteString(`<div class="w-2 h-2 bg-blue-500 rounded-full agent-cursor-blink"></div>`)
+	b.WriteString(`<span id="agent-draft-status" class="text-xs text-blue-600 font-medium">AI Writing...</span>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="space-y-2 text-xs">`)
+	b.WriteString(`<div class="flex items-start gap-2">`)
+	b.WriteString(`<span class="text-gray-500 font-medium w-12 shrink-0">To:</span>`)
+	b.WriteString(`<span class="text-gray-900 break-all">john.doe@company.com</span>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="flex items-start gap-2">`)
+	b.WriteString(`<span class="text-gray-500 font-medium w-12 shrink-0">Subject:</span>`)
+	b.WriteString(`<span id="agent-subject-line" class="text-gray-900 agent-typing-animation">Project Update and Next Steps</span>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="p-4 text-sm text-gray-700 space-y-3">`)
+	b.WriteString(`<p>Dear John,</p>`)
+	b.WriteString(`<p id="agent-email-content" class="agent-typing-animation">I wanted to provide you with an update on our current project status and outline the next steps moving forward.</p>`)
+	b.WriteString(`<div>`)
+	b.WriteString(`<div class="text-xs font-semibold text-gray-900">Current Progress</div>`)
+	b.WriteString(`<ul class="list-disc pl-5 mt-2 space-y-1 text-sm">`)
+	b.WriteString(`<li>Completed initial research phase</li>`)
+	b.WriteString(`<li>Finalized project specifications</li>`)
+	b.WriteString(`<li>Assembled the development team</li>`)
+	b.WriteString(`</ul>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<div>`)
+	b.WriteString(`<div class="text-xs font-semibold text-gray-900">Next Steps</div>`)
+	b.WriteString(`<ul class="list-disc pl-5 mt-2 space-y-1 text-sm">`)
+	b.WriteString(`<li>Begin development phase next week</li>`)
+	b.WriteString(`<li>Schedule weekly progress meetings</li>`)
+	b.WriteString(`<li>Set up project tracking dashboard</li>`)
+	b.WriteString(`</ul>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<p>Best regards,<br>Your AI Assistant</p>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="mt-auto p-4 border-t border-gray-200 bg-white">`)
+	b.WriteString(`<label for="agent-chat-input" class="block text-xs font-medium text-gray-700 mb-2">Chat with agent</label>`)
+	b.WriteString(`<div class="rounded-xl border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">`)
+	b.WriteString(`<textarea id="agent-chat-input" rows="4" class="w-full px-3 py-3 text-sm border-0 rounded-t-xl resize-y focus:outline-none" placeholder="Tell the agent what to do next..."></textarea>`)
+	b.WriteString(`<div class="flex items-center justify-between px-3 py-2 border-t border-gray-200 bg-gray-50 rounded-b-xl">`)
+	b.WriteString(`<div class="flex items-center gap-2">`)
+	b.WriteString(`<button type="button" class="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-md" aria-label="Attach file">`)
+	b.WriteString(`<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.5 6.5v9a4.5 4.5 0 1 1-9 0v-10a3 3 0 1 1 6 0v9a1.5 1.5 0 0 1-3 0V7H9v7.5a3 3 0 0 0 6 0v-9a4.5 4.5 0 1 0-9 0v10a6 6 0 1 0 12 0v-9h-1.5z"/></svg>`)
+	b.WriteString(`</button>`)
+	b.WriteString(`<button type="button" class="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-md" aria-label="Voice input">`)
+	b.WriteString(`<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z"/></svg>`)
+	b.WriteString(`</button>`)
+	b.WriteString(`<span class="text-[11px] text-gray-400">Enter to send</span>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`<button id="agent-send-button" type="button" class="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-2 rounded-lg">`)
+	b.WriteString(`<svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>`)
+	b.WriteString(`<span>Send</span>`)
+	b.WriteString(`</button>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</aside>`)
+	b.WriteString(renderHomeAgentWorkspaceScript())
+
+	// Close split grid.
+	b.WriteString(`</div>`)
 
 	return template.HTML(b.String())
+}
+
+func renderHomeAgentWorkspaceScript() string {
+	return `<script>
+(() => {
+  const host = document.getElementById('agent-avatar-host');
+  const chatInput = document.getElementById('agent-chat-input');
+  const sendButton = document.getElementById('agent-send-button');
+  const subjectLine = document.getElementById('agent-subject-line');
+  const emailContent = document.getElementById('agent-email-content');
+  const draftStatus = document.getElementById('agent-draft-status');
+  if (!host || !chatInput || !subjectLine || !emailContent || !draftStatus) return;
+
+  let avatarSvg = null;
+  let pupilL = null;
+  let pupilR = null;
+  let lidL = null;
+  let lidR = null;
+  const eyeL = { x: 278, y: 540 };
+  const eyeR = { x: 605, y: 540 };
+  const keyboardFocus = { x: 442, y: 740 };
+  const cameraFocus = { x: 442, y: 520 };
+  const maxOffset = 20;
+
+  let chatFocused = false;
+  let lastMouseMove = 0;
+  const mouseWindowMs = 650;
+  let mouseSvg = { x: keyboardFocus.x, y: keyboardFocus.y };
+  let smoothTarget = { x: keyboardFocus.x, y: keyboardFocus.y };
+  let pupilOffset = { x: 0, y: 0 };
+  let nextBlinkAt = performance.now() + rand(1200, 4200);
+  let blinkPhase = 0;
+  let blinkT = 0;
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function setTyping(typing) {
+    subjectLine.classList.toggle('agent-typing-paused', !typing);
+    emailContent.classList.toggle('agent-typing-paused', !typing);
+    draftStatus.textContent = typing ? 'AI Writing...' : 'Paused';
+  }
+
+  function computeTarget() {
+    const mouseActive = (performance.now() - lastMouseMove) < mouseWindowMs;
+    if (mouseActive) return mouseSvg;
+    return chatFocused ? cameraFocus : keyboardFocus;
+  }
+
+  function updateEyes(dt) {
+    if (!pupilL || !pupilR) return;
+    const target = computeTarget();
+    const follow = 0.12;
+    smoothTarget.x = lerp(smoothTarget.x, target.x, 1 - Math.pow(1 - follow, dt * 60));
+    smoothTarget.y = lerp(smoothTarget.y, target.y, 1 - Math.pow(1 - follow, dt * 60));
+    const mid = { x: (eyeL.x + eyeR.x) / 2, y: (eyeL.y + eyeR.y) / 2 };
+    let dx = smoothTarget.x - mid.x;
+    let dy = smoothTarget.y - mid.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const scale = Math.min(1, maxOffset / dist);
+    dx *= scale;
+    dy *= scale;
+    const ease = 0.22;
+    pupilOffset.x = lerp(pupilOffset.x, dx, 1 - Math.pow(1 - ease, dt * 60));
+    pupilOffset.y = lerp(pupilOffset.y, dy, 1 - Math.pow(1 - ease, dt * 60));
+    const transform = 'translate(' + pupilOffset.x + ',' + pupilOffset.y + ')';
+    pupilL.setAttribute('transform', transform);
+    pupilR.setAttribute('transform', transform);
+  }
+
+  function updateBlink(dt) {
+    if (!lidL || !lidR) return;
+    const now = performance.now();
+    if (blinkPhase === 0 && now >= nextBlinkAt) {
+      blinkPhase = 1;
+      blinkT = 0;
+    }
+    if (blinkPhase === 0) {
+      lidL.setAttribute('height', '0');
+      lidR.setAttribute('height', '0');
+      return;
+    }
+    const closeDur = 0.08;
+    const openDur = 0.1;
+    if (blinkPhase === 1) {
+      blinkT += dt;
+      const t = clamp(blinkT / closeDur, 0, 1);
+      const h = lerp(0, 120, t);
+      lidL.setAttribute('height', String(h));
+      lidR.setAttribute('height', String(h));
+      if (t >= 1) {
+        blinkPhase = 2;
+        blinkT = 0;
+      }
+    } else {
+      blinkT += dt;
+      const t = clamp(blinkT / openDur, 0, 1);
+      const h = lerp(120, 0, t);
+      lidL.setAttribute('height', String(h));
+      lidR.setAttribute('height', String(h));
+      if (t >= 1) {
+        blinkPhase = 0;
+        nextBlinkAt = now + rand(1600, 5200);
+      }
+    }
+  }
+
+  function mapMouseToSvg(event) {
+    if (!avatarSvg) return;
+    const viewBox = avatarSvg.viewBox && avatarSvg.viewBox.baseVal ? avatarSvg.viewBox.baseVal : null;
+    if (!viewBox) return;
+    const rect = avatarSvg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const rx = (event.clientX - rect.left) / rect.width;
+    const ry = (event.clientY - rect.top) / rect.height;
+    mouseSvg.x = viewBox.x + rx * viewBox.width;
+    mouseSvg.y = viewBox.y + ry * viewBox.height;
+  }
+
+  let lastFrame = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.033, (now - lastFrame) / 1000);
+    lastFrame = now;
+    updateEyes(dt);
+    updateBlink(dt);
+    requestAnimationFrame(frame);
+  }
+
+  chatInput.addEventListener('focus', () => {
+    chatFocused = true;
+    setTyping(false);
+  });
+  chatInput.addEventListener('blur', () => {
+    chatFocused = false;
+    setTimeout(() => {
+      if (document.activeElement !== chatInput) setTyping(true);
+    }, 80);
+  });
+  chatInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (sendButton) sendButton.click();
+    }
+  });
+
+  if (sendButton) {
+    sendButton.addEventListener('click', () => {
+      if (!chatInput.value.trim()) return;
+      sendButton.classList.add('scale-95');
+      setTimeout(() => {
+        sendButton.classList.remove('scale-95');
+        chatInput.value = '';
+        chatInput.blur();
+      }, 160);
+    });
+  }
+
+  window.addEventListener('mousemove', (event) => {
+    lastMouseMove = performance.now();
+    mapMouseToSvg(event);
+  }, { passive: true });
+
+  fetch('/static/cute-chibi.svg?v=eyes-v2')
+    .then((response) => response.text())
+    .then((svgText) => {
+      host.innerHTML = svgText;
+      avatarSvg = host.querySelector('svg');
+      if (!avatarSvg) return;
+      avatarSvg.setAttribute('width', '100%');
+      avatarSvg.setAttribute('height', '100%');
+      avatarSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      pupilL = avatarSvg.querySelector('#pupilL');
+      pupilR = avatarSvg.querySelector('#pupilR');
+      lidL = avatarSvg.querySelector('#lidL');
+      lidR = avatarSvg.querySelector('#lidR');
+      setTyping(true);
+      requestAnimationFrame(frame);
+    })
+    .catch(() => {
+      setTyping(true);
+    });
+})();
+</script>`
 }
