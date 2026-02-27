@@ -141,6 +141,29 @@ CREATE INDEX IF NOT EXISTS idx_deals_workspace_state
 CREATE INDEX IF NOT EXISTS idx_deals_workspace_next_step_due
   ON deals(workspace_id, state, next_step_due_at, next_step_completed_at);
 
+CREATE TABLE IF NOT EXISTS activity_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  actor_kind TEXT NOT NULL CHECK(actor_kind IN ('human','agent','system')),
+  actor_user_id INTEGER,
+  verb TEXT NOT NULL DEFAULT '',
+  object_type TEXT NOT NULL DEFAULT '',
+  object_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'done' CHECK(status IN ('done','current','error','canceled','paused','staged','proposed')),
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  detail_json TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(actor_user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_workspace_created
+  ON activity_events(workspace_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_workspace_actor_status
+  ON activity_events(workspace_id, actor_kind, status, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS deal_contacts (
   deal_id INTEGER NOT NULL,
   contact_id INTEGER NOT NULL,

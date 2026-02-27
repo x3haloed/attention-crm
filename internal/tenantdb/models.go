@@ -109,6 +109,20 @@ type DealEvent struct {
 	CreatedAt   string
 }
 
+type ActivityEvent struct {
+	ID          int64
+	ActorKind   string
+	ActorUserID sql.NullInt64
+	Verb        string
+	ObjectType  string
+	ObjectID    sql.NullInt64
+	Status      string
+	Title       string
+	Summary     string
+	DetailJSON  string
+	CreatedAt   string
+}
+
 type Invite struct {
 	ID          int64
 	Email       string

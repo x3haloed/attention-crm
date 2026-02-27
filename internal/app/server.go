@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"html/template"
 	"sync"
@@ -119,19 +120,80 @@ func (s *Server) ensureDevFixture() error {
 		_ = db.CreateContact("Alex Johnson", "alex@startup.io", "", "Startup.io", "")
 	}
 
+	var sarahContactID int64
 	sarah, _ := db.SearchContacts("Sarah Chen", 1)
 	if len(sarah) == 1 {
-		contactID := sarah[0].ID
+		sarahContactID = sarah[0].ID
 		recent, _ := db.ListRecentInteractions(1)
-			if len(recent) == 0 {
-				due := time.Now().Add(2 * time.Hour)
-				_ = db.CreateInteractionBy(1, contactID, "call", "Follow up call scheduled", &due)
-				_ = db.CreateInteractionBy(1, contactID, "note", "Called about Q1 budget planning", nil)
-			}
+		if len(recent) == 0 {
+			due := time.Now().Add(2 * time.Hour)
+			_ = db.CreateInteractionBy(1, sarahContactID, "call", "Follow up call scheduled", &due)
+			_ = db.CreateInteractionBy(1, sarahContactID, "note", "Called about Q1 budget planning", nil)
 		}
+	}
+
+	agentEvents, _ := db.ListRecentActivityEventsByActorKind(tenantdb.ActorKindAgent, 1)
+	if len(agentEvents) == 0 {
+		now := time.Now().UTC()
+		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
+			ActorKind:  tenantdb.ActorKindAgent,
+			Status:     tenantdb.ActivityStatusDone,
+			Title:      "Analyzed meeting notes",
+			Summary:    "Pulled out key points and constraints.",
+			CreatedAt:  ptrTime(now.Add(-2 * time.Minute)),
+			ObjectType: "notes",
+			Verb:       "analyze",
+		})
+		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
+			ActorKind:  tenantdb.ActorKindAgent,
+			Status:     tenantdb.ActivityStatusDone,
+			Title:      "Identified key action items",
+			Summary:    "Converted notes into next steps and owners.",
+			CreatedAt:  ptrTime(now.Add(-1 * time.Minute)),
+			ObjectType: "action_items",
+			Verb:       "extract",
+		})
+		var objectID *int64
+		if sarahContactID != 0 {
+			id := sarahContactID
+			objectID = &id
+		}
+		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
+			ActorKind:  tenantdb.ActorKindAgent,
+			Status:     tenantdb.ActivityStatusDone,
+			Title:      "Gathered recipient context",
+			Summary:    "Checked prior interactions and tone.",
+			CreatedAt:  ptrTime(now.Add(-45 * time.Second)),
+			ObjectType: "contact",
+			ObjectID:   objectID,
+			Verb:       "gather_context",
+		})
+
+		detail, _ := json.Marshal(map[string]any{
+			"to":      "john.doe@company.com",
+			"subject": "Meeting Follow-up and Next Steps",
+			"body": []string{
+				"Dear John,",
+				"Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.",
+				"Looking forward to hearing your thoughts and moving this project forward together...",
+			},
+		})
+		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
+			ActorKind:  tenantdb.ActorKindAgent,
+			Status:     tenantdb.ActivityStatusCurrent,
+			Title:      "Email Draft",
+			Summary:    "Drafting follow-up email from meeting notes.",
+			CreatedAt:  ptrTime(now.Add(-15 * time.Second)),
+			ObjectType: "email_draft",
+			Verb:       "draft",
+			DetailJSON: string(detail),
+		})
+	}
 
 	return nil
 }
+
+func ptrTime(t time.Time) *time.Time { return &t }
 
 type omniContact struct {
 	ID        int64  `json:"id"`

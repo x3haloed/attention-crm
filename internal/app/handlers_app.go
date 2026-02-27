@@ -2,6 +2,7 @@ package app
 
 import (
 	"attention-crm/internal/control"
+	"attention-crm/internal/tenantdb"
 	"net/http"
 )
 
@@ -40,7 +41,18 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 		return
 	}
 
-	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, needsDeals, recent)
+	agentPast, err := db.ListRecentNonCurrentActivityEventsByActorKind(tenantdb.ActorKindAgent, 8)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	agentCurrent, err := db.CurrentActivityEventByActorKind(tenantdb.ActorKindAgent)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+
+	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, needsDeals, recent, agentPast, agentCurrent)
 	csrf, err := s.ensureCSRFCookie(w, r)
 	if err != nil {
 		s.internalError(w, r, err)

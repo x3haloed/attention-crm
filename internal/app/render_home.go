@@ -3,6 +3,7 @@ package app
 import (
 	"attention-crm/internal/control"
 	"attention-crm/internal/tenantdb"
+	"encoding/json"
 	"html/template"
 	"strconv"
 	"strings"
@@ -17,6 +18,8 @@ func renderTenantAppBody(
 	needsAttention []tenantdb.Interaction,
 	needsDeals []tenantdb.Deal,
 	recent []tenantdb.Interaction,
+	agentPast []tenantdb.ActivityEvent,
+	agentCurrent *tenantdb.ActivityEvent,
 ) template.HTML {
 	var b strings.Builder
 	now := time.Now()
@@ -46,8 +49,8 @@ func renderTenantAppBody(
 
 	// Home split layout: left dashboard (2/3) + right rail (1/3 placeholder).
 	// Inline grid columns ensure this works even if Tailwind CSS has not been rebuilt yet.
-	b.WriteString(`<div id="home-split-grid" class="grid gap-6 mt-6" style="grid-template-columns: 2fr 1fr;">`)
-	b.WriteString(`<div id="home-main-column">`)
+	b.WriteString(`<div id="home-split-grid" class="grid gap-6 mt-6 w-full" style="grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);">`)
+	b.WriteString(`<div id="home-main-column" class="min-w-0">`)
 
 	// Universal action surface (kept in left 2/3 column).
 	b.WriteString(string(renderOmniBar(tenant, state.UniversalText, "home")))
@@ -172,6 +175,11 @@ func renderTenantAppBody(
 	b.WriteString(`<style>
 			@keyframes agent-typing { from { width: 0; } to { width: 100%; } }
 			@keyframes agent-caret { 0%, 50% { border-color: transparent; } 51%, 100% { border-color: rgb(59 130 246); } }
+			@keyframes agent-pulse-glow {
+				0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.35); }
+				70% { box-shadow: 0 0 0 10px rgba(34,197,94,0); }
+				100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+			}
 			.agent-typing-animation {
 				display: inline-block;
 				max-width: 100%;
@@ -181,13 +189,15 @@ func renderTenantAppBody(
 			animation: agent-typing 3s steps(40, end) infinite, agent-caret 1s step-end infinite;
 		}
 		.agent-typing-paused { animation-play-state: paused; border-right-color: transparent; }
+		.agent-pulse-glow { animation: agent-pulse-glow 1.6s infinite; }
 		@media (prefers-reduced-motion: reduce) {
 			.agent-typing-animation { animation: none; border-right-color: transparent; }
+			.agent-pulse-glow { animation: none; }
 		}
 	</style>`)
 
 	// Right rail: agent workspace scaffold (static layout only).
-	b.WriteString(`<aside id="home-right-rail">`)
+	b.WriteString(`<aside id="home-right-rail" class="min-w-0">`)
 	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">`)
 	b.WriteString(`<div class="flex flex-col" style="min-height: calc(100vh - 9rem);">`)
 	b.WriteString(`<div class="p-6 border-b border-gray-200">`)
@@ -199,44 +209,7 @@ func renderTenantAppBody(
 	b.WriteString(`</div>`)
 
 	b.WriteString(`<div class="p-6 flex-1 min-h-0 bg-gray-50 overflow-auto">`)
-	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full">`)
-	b.WriteString(`<div class="border-b border-gray-200 p-4">`)
-	b.WriteString(`<div class="flex items-center justify-between gap-3">`)
-	b.WriteString(`<h3 class="text-sm font-semibold text-gray-900">Email Draft</h3>`)
-	b.WriteString(`<div class="flex items-center gap-3">`)
-	b.WriteString(`<div class="flex items-center gap-1.5">`)
-	b.WriteString(`<div class="w-2.5 h-2.5 bg-red-400 rounded-full"></div>`)
-	b.WriteString(`<div class="w-2.5 h-2.5 bg-yellow-400 rounded-full"></div>`)
-	b.WriteString(`<div class="w-2.5 h-2.5 bg-green-400 rounded-full"></div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-
-	b.WriteString(`<div class="p-4 space-y-4">`)
-	b.WriteString(`<div class="space-y-3 text-xs">`)
-	b.WriteString(`<div class="flex items-center gap-3">`)
-	b.WriteString(`<span class="text-gray-600 font-medium w-14 shrink-0">To:</span>`)
-	b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0">`)
-	b.WriteString(`<span id="agent-to-line" class="text-gray-900 break-all">john.doe@company.com</span>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`<div class="flex items-center gap-3">`)
-	b.WriteString(`<span class="text-gray-600 font-medium w-14 shrink-0">Subject:</span>`)
-	b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0">`)
-	b.WriteString(`<span id="agent-subject-line" class="text-gray-900">Meeting Follow-up and Next Steps</span>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-
-	b.WriteString(`<div class="bg-gray-50 rounded-xl p-4 min-h-[12rem]">`)
-	b.WriteString(`<div class="space-y-3 text-sm leading-relaxed w-full max-w-[200px] mx-auto">`)
-	b.WriteString(`<p class="text-gray-900">Dear John,</p>`)
-	b.WriteString(`<p class="text-gray-900">Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.</p>`)
-	b.WriteString(`<p id="agent-typing-line" class="text-gray-900 agent-typing-animation">Based on our conversation, we can move into implementation next week.</p>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
+	b.WriteString(renderAgentActionSpine(now, agentPast, agentCurrent))
 	b.WriteString(`</div>`)
 
 	b.WriteString(`<div class="mt-auto p-4 border-t border-gray-200 bg-white">`)
@@ -270,6 +243,167 @@ func renderTenantAppBody(
 	b.WriteString(`</div>`)
 
 	return template.HTML(b.String())
+}
+
+type emailDraftDetail struct {
+	To      string   `json:"to"`
+	Subject string   `json:"subject"`
+	Body    []string `json:"body"`
+}
+
+func renderAgentActionSpine(now time.Time, past []tenantdb.ActivityEvent, current *tenantdb.ActivityEvent) string {
+	var b strings.Builder
+
+	// v0: until the real agent runtime is wired in, show a demo spine when empty so the UI isn't blank.
+	// This avoids a "nothing rendered" failure mode during UX iteration.
+	if len(past) == 0 && current == nil {
+		past = []tenantdb.ActivityEvent{
+			{Title: "Analyzed meeting notes", Summary: "Pulled out key points and constraints.", CreatedAt: now.Add(-2 * time.Minute).UTC().Format(time.RFC3339)},
+			{Title: "Identified key action items", Summary: "Converted notes into next steps and owners.", CreatedAt: now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)},
+			{Title: "Gathered recipient context", Summary: "Checked prior interactions and tone.", CreatedAt: now.Add(-45 * time.Second).UTC().Format(time.RFC3339)},
+		}
+		detail, _ := json.Marshal(emailDraftDetail{
+			To:      "john.doe@company.com",
+			Subject: "Meeting Follow-up and Next Steps",
+			Body: []string{
+				"Dear John,",
+				"Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.",
+				"Looking forward to hearing your thoughts and moving this project forward together...",
+			},
+		})
+		current = &tenantdb.ActivityEvent{
+			Title:      "Email Draft",
+			Summary:    "Drafting follow-up email from meeting notes.",
+			DetailJSON: string(detail),
+			CreatedAt:  now.Add(-15 * time.Second).UTC().Format(time.RFC3339),
+		}
+	}
+
+	// Use a consistent "spine" layout regardless of whether there's an active event.
+	b.WriteString(`<div id="email-drafting-area" class="flex-1 bg-gray-50 overflow-y-auto py-2">`)
+	b.WriteString(`<div class="max-w-2xl mx-auto">`)
+	b.WriteString(`<div id="action-spine" class="mb-6 sm:mb-8">`)
+	b.WriteString(`<div class="relative">`)
+	b.WriteString(`<div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-purple-400"></div>`)
+	b.WriteString(`<div class="space-y-3 sm:space-y-4 min-h-[10rem]">`)
+
+	colors := []struct {
+		dot    string
+		border string
+	}{
+		{dot: "bg-blue-500", border: "border-blue-100"},
+		{dot: "bg-purple-500", border: "border-purple-100"},
+		{dot: "bg-indigo-500", border: "border-indigo-100"},
+	}
+
+	// Past (oldest -> newest).
+	for idx := len(past) - 1; idx >= 0; idx-- {
+		ev := past[idx]
+		c := colors[(len(past)-1-idx)%len(colors)]
+		b.WriteString(`<div class="flex items-start space-x-4">`)
+		b.WriteString(`<div class="flex-shrink-0 w-8 h-8 ` + c.dot + ` rounded-full flex items-center justify-center z-10 shadow-lg">`)
+		b.WriteString(`<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`<div class="flex-1 bg-white rounded-lg shadow-md px-3 py-2 sm:px-4 sm:py-3 border ` + c.border + `">`)
+		b.WriteString(`<div class="flex items-center justify-between gap-3">`)
+		b.WriteString(`<span class="text-xs sm:text-sm font-medium text-gray-700">` + template.HTMLEscapeString(ev.Title) + `</span>`)
+		b.WriteString(`<span class="text-xs text-gray-400">` + template.HTMLEscapeString(relativeTime(ev.CreatedAt, now)) + `</span>`)
+		b.WriteString(`</div>`)
+		if strings.TrimSpace(ev.Summary) != "" {
+			b.WriteString(`<div class="mt-1 text-[11px] sm:text-xs text-gray-500">` + template.HTMLEscapeString(ev.Summary) + `</div>`)
+		}
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+	}
+
+	if current != nil {
+		// Current action node + rich view.
+		b.WriteString(`<div class="flex items-start space-x-4">`)
+		b.WriteString(`<div class="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center z-10 shadow-lg agent-pulse-glow">`)
+		b.WriteString(`<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm18-11.5a1 1 0 0 0 0-1.41l-1.34-1.34a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75L21 5.75Z"/></svg>`)
+		b.WriteString(`</div>`)
+
+		// Rich current view: email draft (v1).
+		var detail emailDraftDetail
+		_ = json.Unmarshal([]byte(current.DetailJSON), &detail)
+		if strings.TrimSpace(detail.To) == "" {
+			detail.To = "john.doe@company.com"
+		}
+		if strings.TrimSpace(detail.Subject) == "" {
+			detail.Subject = "Meeting Follow-up and Next Steps"
+		}
+		if len(detail.Body) == 0 {
+			detail.Body = []string{
+				"Dear John,",
+				"Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.",
+				"Looking forward to hearing your thoughts and moving this project forward together...",
+			}
+		}
+
+		b.WriteString(`<div class="bg-white rounded-lg shadow-lg p-4 sm:p-6 border border-gray-200 ml-12 w-full min-w-0">`)
+		b.WriteString(`<div class="flex items-center justify-between mb-4">`)
+		b.WriteString(`<h2 class="text-lg sm:text-xl font-semibold text-gray-800">` + template.HTMLEscapeString(current.Title) + `</h2>`)
+		b.WriteString(`<div class="flex space-x-2">`)
+		b.WriteString(`<div class="w-3 h-3 bg-red-400 rounded-full"></div>`)
+		b.WriteString(`<div class="w-3 h-3 bg-yellow-400 rounded-full"></div>`)
+		b.WriteString(`<div class="w-3 h-3 bg-green-400 rounded-full"></div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+		if strings.TrimSpace(current.Summary) != "" {
+			b.WriteString(`<div class="text-xs text-gray-600 mb-4">` + template.HTMLEscapeString(current.Summary) + `</div>`)
+		}
+
+		b.WriteString(`<div class="space-y-4">`)
+		b.WriteString(`<div class="flex items-center space-x-3">`)
+		b.WriteString(`<label class="text-sm font-medium text-gray-600 w-16">To:</label>`)
+		b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0"><span id="agent-to-line" class="text-gray-800 text-sm sm:text-base break-all">` + template.HTMLEscapeString(detail.To) + `</span></div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`<div class="flex items-center space-x-3">`)
+		b.WriteString(`<label class="text-sm font-medium text-gray-600 w-16">Subject:</label>`)
+		b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0"><span id="agent-subject-line" class="text-gray-800 text-sm sm:text-base">` + template.HTMLEscapeString(detail.Subject) + `</span></div>`)
+		b.WriteString(`</div>`)
+
+		b.WriteString(`<div class="mt-6">`)
+		b.WriteString(`<div class="bg-gray-50 rounded-lg p-4 sm:p-6 min-h-48">`)
+		b.WriteString(`<div id="email-body" class="space-y-3 sm:space-y-4 text-sm sm:text-base">`)
+		for i, line := range detail.Body {
+			if i == len(detail.Body)-1 {
+				b.WriteString(`<p id="agent-typing-line" class="text-gray-800 agent-typing-animation">` + template.HTMLEscapeString(line) + `</p>`)
+				continue
+			}
+			b.WriteString(`<p class="text-gray-800">` + template.HTMLEscapeString(line) + `</p>`)
+		}
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+
+		// Reason/Evidence stubs.
+		b.WriteString(`<div class="pt-4 border-t border-gray-100">`)
+		b.WriteString(`<div class="flex items-center justify-between gap-3">`)
+		b.WriteString(`<div class="text-xs text-gray-500">Reason and evidence available (stub)</div>`)
+		b.WriteString(`<button type="button" disabled class="px-2.5 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-400 bg-white">Evidence</button>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+
+		// Placeholder controls (Undo/Revise) for witness-paced commits later.
+		b.WriteString(`<div class="pt-4 flex items-center justify-end gap-2">`)
+		b.WriteString(`<button type="button" disabled class="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-400 bg-white">Undo</button>`)
+		b.WriteString(`<button type="button" disabled class="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-200 text-gray-400 bg-white">Revise</button>`)
+		b.WriteString(`</div>`)
+
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
+	}
+
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	return b.String()
 }
 
 func renderHomeAgentWorkspaceScript() string {
