@@ -170,16 +170,20 @@ func renderTenantAppBody(
 	b.WriteString(`</div>`)
 
 	b.WriteString(`<style>
-		@keyframes agent-cursor-blink { 0%, 90% { opacity: 1; } 95% { opacity: 0; } }
-		@keyframes agent-typing-reveal { 0%, 100% { width: 0; } 50% { width: 100%; } }
-		.agent-cursor-blink { animation: agent-cursor-blink 1s infinite; }
-		.agent-typing-animation {
-			animation: agent-typing-reveal 2.4s ease-in-out infinite;
+			@keyframes agent-typing { from { width: 0; } to { width: 100%; } }
+			@keyframes agent-caret { 0%, 50% { border-color: transparent; } 51%, 100% { border-color: rgb(59 130 246); } }
+			.agent-typing-animation {
+				display: inline-block;
+				max-width: 100%;
 			white-space: nowrap;
 			overflow: hidden;
 			border-right: 2px solid rgb(59 130 246);
+			animation: agent-typing 3s steps(40, end) infinite, agent-caret 1s step-end infinite;
 		}
 		.agent-typing-paused { animation-play-state: paused; border-right-color: transparent; }
+		@media (prefers-reduced-motion: reduce) {
+			.agent-typing-animation { animation: none; border-right-color: transparent; }
+		}
 	</style>`)
 
 	// Right rail: agent workspace scaffold (static layout only).
@@ -194,47 +198,43 @@ func renderTenantAppBody(
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 
-	b.WriteString(`<div class="p-6 flex-1 min-h-0 bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">`)
-	b.WriteString(`<div class="bg-white border border-gray-200 rounded-xl w-full max-w-md shadow-sm overflow-hidden">`)
+	b.WriteString(`<div class="p-6 flex-1 min-h-0 bg-gray-50 overflow-auto">`)
+	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full">`)
 	b.WriteString(`<div class="border-b border-gray-200 p-4">`)
-	b.WriteString(`<div class="flex items-center justify-between gap-3 mb-3">`)
-	b.WriteString(`<h3 class="text-sm font-semibold text-gray-900">New Email Draft</h3>`)
-	b.WriteString(`<div class="flex items-center gap-2">`)
-	b.WriteString(`<div class="w-2 h-2 bg-blue-500 rounded-full agent-cursor-blink"></div>`)
-	b.WriteString(`<span id="agent-draft-status" class="text-xs text-blue-600 font-medium">AI Writing...</span>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`<div class="space-y-2 text-xs">`)
-	b.WriteString(`<div class="flex items-start gap-2">`)
-	b.WriteString(`<span class="text-gray-500 font-medium w-12 shrink-0">To:</span>`)
-	b.WriteString(`<span class="text-gray-900 break-all">john.doe@company.com</span>`)
-	b.WriteString(`</div>`)
-	b.WriteString(`<div class="flex items-start gap-2">`)
-	b.WriteString(`<span class="text-gray-500 font-medium w-12 shrink-0">Subject:</span>`)
-	b.WriteString(`<span id="agent-subject-line" class="text-gray-900 agent-typing-animation">Project Update and Next Steps</span>`)
+	b.WriteString(`<div class="flex items-center justify-between gap-3">`)
+	b.WriteString(`<h3 class="text-sm font-semibold text-gray-900">Email Draft</h3>`)
+	b.WriteString(`<div class="flex items-center gap-3">`)
+	b.WriteString(`<div class="flex items-center gap-1.5">`)
+	b.WriteString(`<div class="w-2.5 h-2.5 bg-red-400 rounded-full"></div>`)
+	b.WriteString(`<div class="w-2.5 h-2.5 bg-yellow-400 rounded-full"></div>`)
+	b.WriteString(`<div class="w-2.5 h-2.5 bg-green-400 rounded-full"></div>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<div class="p-4 text-sm text-gray-700 space-y-3">`)
-	b.WriteString(`<p>Dear John,</p>`)
-	b.WriteString(`<p id="agent-email-content" class="agent-typing-animation">I wanted to provide you with an update on our current project status and outline the next steps moving forward.</p>`)
-	b.WriteString(`<div>`)
-	b.WriteString(`<div class="text-xs font-semibold text-gray-900">Current Progress</div>`)
-	b.WriteString(`<ul class="list-disc pl-5 mt-2 space-y-1 text-sm">`)
-	b.WriteString(`<li>Completed initial research phase</li>`)
-	b.WriteString(`<li>Finalized project specifications</li>`)
-	b.WriteString(`<li>Assembled the development team</li>`)
-	b.WriteString(`</ul>`)
+
+	b.WriteString(`<div class="p-4 space-y-4">`)
+	b.WriteString(`<div class="space-y-3 text-xs">`)
+	b.WriteString(`<div class="flex items-center gap-3">`)
+	b.WriteString(`<span class="text-gray-600 font-medium w-14 shrink-0">To:</span>`)
+	b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0">`)
+	b.WriteString(`<span id="agent-to-line" class="text-gray-900 break-all">john.doe@company.com</span>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<div>`)
-	b.WriteString(`<div class="text-xs font-semibold text-gray-900">Next Steps</div>`)
-	b.WriteString(`<ul class="list-disc pl-5 mt-2 space-y-1 text-sm">`)
-	b.WriteString(`<li>Begin development phase next week</li>`)
-	b.WriteString(`<li>Schedule weekly progress meetings</li>`)
-	b.WriteString(`<li>Set up project tracking dashboard</li>`)
-	b.WriteString(`</ul>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<p>Best regards,<br>Your AI Assistant</p>`)
+	b.WriteString(`<div class="flex items-center gap-3">`)
+	b.WriteString(`<span class="text-gray-600 font-medium w-14 shrink-0">Subject:</span>`)
+	b.WriteString(`<div class="flex-1 border-b border-gray-200 pb-1 min-w-0">`)
+	b.WriteString(`<span id="agent-subject-line" class="text-gray-900">Meeting Follow-up and Next Steps</span>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="bg-gray-50 rounded-xl p-4 min-h-[12rem]">`)
+	b.WriteString(`<div class="space-y-3 text-sm leading-relaxed w-full max-w-[200px] mx-auto">`)
+	b.WriteString(`<p class="text-gray-900">Dear John,</p>`)
+	b.WriteString(`<p class="text-gray-900">Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.</p>`)
+	b.WriteString(`<p id="agent-typing-line" class="text-gray-900 agent-typing-animation">Based on our conversation, we can move into implementation next week.</p>`)
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
@@ -279,9 +279,8 @@ func renderHomeAgentWorkspaceScript() string {
   const chatInput = document.getElementById('agent-chat-input');
   const sendButton = document.getElementById('agent-send-button');
   const subjectLine = document.getElementById('agent-subject-line');
-  const emailContent = document.getElementById('agent-email-content');
-  const draftStatus = document.getElementById('agent-draft-status');
-  if (!host || !chatInput || !subjectLine || !emailContent || !draftStatus) return;
+  const typingLine = document.getElementById('agent-typing-line');
+  if (!host || !chatInput || !subjectLine || !typingLine) return;
 
   let avatarSvg = null;
   let pupilL = null;
@@ -309,9 +308,7 @@ func renderHomeAgentWorkspaceScript() string {
   function lerp(a, b, t) { return a + (b - a) * t; }
 
   function setTyping(typing) {
-    subjectLine.classList.toggle('agent-typing-paused', !typing);
-    emailContent.classList.toggle('agent-typing-paused', !typing);
-    draftStatus.textContent = typing ? 'AI Writing...' : 'Paused';
+    typingLine.classList.toggle('agent-typing-paused', !typing);
   }
 
   function computeTarget() {
