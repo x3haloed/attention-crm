@@ -132,42 +132,37 @@ func (s *Server) ensureDevFixture() error {
 		}
 	}
 
-	agentEvents, _ := db.ListRecentActivityEventsByActorKind(tenantdb.ActorKindAgent, 1)
-	if len(agentEvents) == 0 {
+	agentLedger, _ := db.ListLedgerEventsByActorKindAndOp(tenantdb.ActorKindAgent, "agent.spine.event", 1)
+	if len(agentLedger) == 0 {
 		now := time.Now().UTC()
-		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
-			ActorKind:  tenantdb.ActorKindAgent,
-			Status:     tenantdb.ActivityStatusDone,
-			Title:      "Analyzed meeting notes",
-			Summary:    "Pulled out key points and constraints.",
-			CreatedAt:  ptrTime(now.Add(-2 * time.Minute)),
-			ObjectType: "notes",
-			Verb:       "analyze",
-		})
-		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
-			ActorKind:  tenantdb.ActorKindAgent,
-			Status:     tenantdb.ActivityStatusDone,
-			Title:      "Identified key action items",
-			Summary:    "Converted notes into next steps and owners.",
-			CreatedAt:  ptrTime(now.Add(-1 * time.Minute)),
-			ObjectType: "action_items",
-			Verb:       "extract",
-		})
+		appendSpine := func(status, title, summary string, createdAt time.Time, detailJSON string, verb string, objectType string, objectID *int64) {
+			payload, _ := json.Marshal(map[string]any{
+				"status":      status,
+				"title":       title,
+				"summary":     summary,
+				"detail_json": detailJSON,
+				"verb":        verb,
+				"object_type": objectType,
+				"object_id":   objectID,
+			})
+			_, _ = db.AppendLedgerEvent(tenantdb.AppendLedgerEventInput{
+				ActorKind:  tenantdb.ActorKindAgent,
+				Op:         "agent.spine.event",
+				EntityType: "agent_spine",
+				PayloadJSON: string(payload),
+				CreatedAt:  ptrTime(createdAt),
+			})
+		}
+
+		appendSpine("done", "Analyzed meeting notes", "Pulled out key points and constraints.", now.Add(-2*time.Minute), "", "analyze", "notes", nil)
+		appendSpine("done", "Identified key action items", "Converted notes into next steps and owners.", now.Add(-1*time.Minute), "", "extract", "action_items", nil)
+
 		var objectID *int64
 		if sarahContactID != 0 {
 			id := sarahContactID
 			objectID = &id
 		}
-		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
-			ActorKind:  tenantdb.ActorKindAgent,
-			Status:     tenantdb.ActivityStatusDone,
-			Title:      "Gathered recipient context",
-			Summary:    "Checked prior interactions and tone.",
-			CreatedAt:  ptrTime(now.Add(-45 * time.Second)),
-			ObjectType: "contact",
-			ObjectID:   objectID,
-			Verb:       "gather_context",
-		})
+		appendSpine("done", "Gathered recipient context", "Checked prior interactions and tone.", now.Add(-45*time.Second), "", "gather_context", "contact", objectID)
 
 		detail, _ := json.Marshal(map[string]any{
 			"to":      "john.doe@company.com",
@@ -178,16 +173,7 @@ func (s *Server) ensureDevFixture() error {
 				"Looking forward to hearing your thoughts and moving this project forward together...",
 			},
 		})
-		_, _ = db.CreateActivityEvent(tenantdb.CreateActivityEventInput{
-			ActorKind:  tenantdb.ActorKindAgent,
-			Status:     tenantdb.ActivityStatusCurrent,
-			Title:      "Email Draft",
-			Summary:    "Drafting follow-up email from meeting notes.",
-			CreatedAt:  ptrTime(now.Add(-15 * time.Second)),
-			ObjectType: "email_draft",
-			Verb:       "draft",
-			DetailJSON: string(detail),
-		})
+		appendSpine("current", "Email Draft", "Drafting follow-up email from meeting notes.", now.Add(-15*time.Second), string(detail), "draft", "email_draft", nil)
 	}
 
 	return nil

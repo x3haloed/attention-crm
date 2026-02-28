@@ -123,6 +123,24 @@ type ActivityEvent struct {
 	CreatedAt   string
 }
 
+type LedgerEvent struct {
+	ID              int64
+	EventVersion    int
+	ActorKind       string
+	ActorUserID     sql.NullInt64
+	Op              string
+	EntityType      string
+	EntityID        sql.NullInt64
+	PayloadJSON     string
+	Reason          string
+	EvidenceJSON    string
+	CausedByEventID sql.NullInt64
+	ReplacesEventID sql.NullInt64
+	InverseOfEventID sql.NullInt64
+	IdempotencyKey  sql.NullString
+	CreatedAt       string
+}
+
 type Invite struct {
 	ID          int64
 	Email       string

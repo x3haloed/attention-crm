@@ -32,6 +32,11 @@ func main() {
 				log.Fatalf("restore: %v", err)
 			}
 			return
+		case "rebuild":
+			if err := runRebuild(os.Args[2:]); err != nil {
+				log.Fatalf("rebuild: %v", err)
+			}
+			return
 		case "version":
 			fmt.Printf("%s %s %s\n", app.BuildVersion, app.BuildCommit, app.BuildTime)
 			return
@@ -228,5 +233,54 @@ func runRestore(args []string) error {
 	}
 
 	fmt.Printf("restored tenant %s from %s\n", slug, fromPath)
+	return nil
+}
+
+func runRebuild(args []string) error {
+	cfg := app.ConfigFromEnv()
+	applyGlobalOverrides(&cfg, args)
+
+	fs := flag.NewFlagSet("rebuild", flag.ContinueOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug to rebuild projections for (required)")
+	projection := fs.String("projection", "activity_events", "projection name to rebuild (default: activity_events)")
+	if err := fs.Parse(stripGlobalFlags(args)); err != nil {
+		return err
+	}
+
+	slug := strings.TrimSpace(*tenantSlug)
+	if slug == "" {
+		return fmt.Errorf("missing --tenant")
+	}
+	name := strings.TrimSpace(*projection)
+	if name == "" {
+		return fmt.Errorf("missing --projection")
+	}
+
+	store, err := control.Open(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	tenant, err := store.TenantBySlug(slug)
+	if err != nil {
+		return err
+	}
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	switch name {
+	case "activity_events":
+		if err := db.RebuildProjection(tenantdb.ActivityEventsProjection{}); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown projection: %s", name)
+	}
+
+	fmt.Printf("rebuilt projection %s for tenant %s\n", name, slug)
 	return nil
 }

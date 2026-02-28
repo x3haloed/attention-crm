@@ -18,8 +18,8 @@ func renderTenantAppBody(
 	needsAttention []tenantdb.Interaction,
 	needsDeals []tenantdb.Deal,
 	recent []tenantdb.Interaction,
-	agentPast []tenantdb.ActivityEvent,
-	agentCurrent *tenantdb.ActivityEvent,
+	agentPast []spineEvent,
+	agentCurrent *spineEvent,
 ) template.HTML {
 	var b strings.Builder
 	now := time.Now()
@@ -251,33 +251,11 @@ type emailDraftDetail struct {
 	Body    []string `json:"body"`
 }
 
-func renderAgentActionSpine(now time.Time, past []tenantdb.ActivityEvent, current *tenantdb.ActivityEvent) string {
+func renderAgentActionSpine(now time.Time, past []spineEvent, current *spineEvent) string {
 	var b strings.Builder
 
-	// v0: until the real agent runtime is wired in, show a demo spine when empty so the UI isn't blank.
-	// This avoids a "nothing rendered" failure mode during UX iteration.
-	if len(past) == 0 && current == nil {
-		past = []tenantdb.ActivityEvent{
-			{Title: "Analyzed meeting notes", Summary: "Pulled out key points and constraints.", CreatedAt: now.Add(-2 * time.Minute).UTC().Format(time.RFC3339)},
-			{Title: "Identified key action items", Summary: "Converted notes into next steps and owners.", CreatedAt: now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)},
-			{Title: "Gathered recipient context", Summary: "Checked prior interactions and tone.", CreatedAt: now.Add(-45 * time.Second).UTC().Format(time.RFC3339)},
-		}
-		detail, _ := json.Marshal(emailDraftDetail{
-			To:      "john.doe@company.com",
-			Subject: "Meeting Follow-up and Next Steps",
-			Body: []string{
-				"Dear John,",
-				"Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.",
-				"Looking forward to hearing your thoughts and moving this project forward together...",
-			},
-		})
-		current = &tenantdb.ActivityEvent{
-			Title:      "Email Draft",
-			Summary:    "Drafting follow-up email from meeting notes.",
-			DetailJSON: string(detail),
-			CreatedAt:  now.Add(-15 * time.Second).UTC().Format(time.RFC3339),
-		}
-	}
+	// (No demo fallback.) This surface is rendered from the append-only ledger; if there are no
+	// events yet, show an explicit empty state.
 
 	// Use a consistent "spine" layout regardless of whether there's an active event.
 	b.WriteString(`<div id="email-drafting-area" class="flex-1 bg-gray-50 overflow-y-auto py-2">`)
@@ -294,6 +272,18 @@ func renderAgentActionSpine(now time.Time, past []tenantdb.ActivityEvent, curren
 		{dot: "bg-blue-500", border: "border-blue-100"},
 		{dot: "bg-purple-500", border: "border-purple-100"},
 		{dot: "bg-indigo-500", border: "border-indigo-100"},
+	}
+
+	if len(past) == 0 && current == nil {
+		b.WriteString(`<div class="flex items-start space-x-4">`)
+		b.WriteString(`<div class="flex-shrink-0 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center z-10">`)
+		b.WriteString(`<svg class="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22a10 10 0 1 0-10-10 10 10 0 0 0 10 10Zm1-11V7h-2v6h6v-2Z"/></svg>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`<div class="flex-1 bg-white rounded-lg shadow-sm px-3 py-2 sm:px-4 sm:py-3 border border-gray-200">`)
+		b.WriteString(`<div class="text-xs sm:text-sm font-medium text-gray-700">No agent activity yet</div>`)
+		b.WriteString(`<div class="mt-1 text-[11px] sm:text-xs text-gray-500">When the agent proposes actions, they’ll appear here as an append-only spine.</div>`)
+		b.WriteString(`</div>`)
+		b.WriteString(`</div>`)
 	}
 
 	// Past (oldest -> newest).

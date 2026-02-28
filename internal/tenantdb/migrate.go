@@ -141,6 +141,59 @@ CREATE INDEX IF NOT EXISTS idx_deals_workspace_state
 CREATE INDEX IF NOT EXISTS idx_deals_workspace_next_step_due
   ON deals(workspace_id, state, next_step_due_at, next_step_completed_at);
 
+CREATE TABLE IF NOT EXISTS ledger_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  event_version INTEGER NOT NULL DEFAULT 1,
+
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  actor_kind TEXT NOT NULL CHECK(actor_kind IN ('human','agent','system')),
+  actor_user_id INTEGER,
+
+  op TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER,
+
+  payload_json TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  evidence_json TEXT NOT NULL DEFAULT '',
+
+  caused_by_event_id INTEGER,
+  replaces_event_id INTEGER,
+  inverse_of_event_id INTEGER,
+
+  idempotency_key TEXT,
+
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(actor_user_id) REFERENCES users(id),
+  FOREIGN KEY(caused_by_event_id) REFERENCES ledger_events(id),
+  FOREIGN KEY(replaces_event_id) REFERENCES ledger_events(id),
+  FOREIGN KEY(inverse_of_event_id) REFERENCES ledger_events(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_events_workspace_created
+  ON ledger_events(workspace_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_events_workspace_actor_created
+  ON ledger_events(workspace_id, actor_kind, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_events_entity
+  ON ledger_events(workspace_id, entity_type, entity_id, created_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_events_idempotency
+  ON ledger_events(workspace_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL AND idempotency_key != '';
+
+CREATE TABLE IF NOT EXISTS projection_cursors (
+  workspace_id INTEGER NOT NULL,
+  projection_name TEXT NOT NULL,
+  last_event_id INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  PRIMARY KEY(workspace_id, projection_name),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+);
+
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   workspace_id INTEGER NOT NULL,
