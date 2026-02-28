@@ -50,20 +50,19 @@ func (s *Server) handleApp(w http.ResponseWriter, r *http.Request, tenant contro
 		return
 	}
 
-	ledger, err := db.ListLedgerEventsByActorKindAndOp(tenantdb.ActorKindAgent, "agent.spine.event", 25)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	agentPast, agentCurrent := splitAgentSpineEvents(ledger)
-
-	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, needsDeals, recent, agentPast, agentCurrent)
+	body := renderTenantAppBody(tenant, sess.UserID, state, contacts, needsAttention, needsDeals, recent)
 	csrf, err := s.ensureCSRFCookie(w, r)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{Title: "Attention CRM", Body: body, CSRFToken: csrf})
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
+		Title:      "Attention CRM",
+		TenantSlug: tenant.Slug,
+		OmniBar:    renderOmniBar(tenant, state.UniversalText, "header"),
+		Body:       body,
+		CSRFToken:  csrf,
+	})
 }
 
 type spinePayload struct {

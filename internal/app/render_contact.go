@@ -166,86 +166,6 @@ func renderContactDetailBody(
 	}
 	b.WriteString(`</div></div>`)
 
-	b.WriteString(`<script>
-(function(){
-  var tenantSlug = "` + template.HTMLEscapeString(tenant.Slug) + `";
-  var contactID = ` + strconv.FormatInt(contact.ID, 10) + `;
-  var updateURL = "/t/" + tenantSlug + "/contacts/" + contactID + "/update";
-
-  var saveIndicator = document.getElementById('save-indicator');
-  function setIndicator(state){
-    if(!saveIndicator) return;
-    if(state === "saving"){
-      saveIndicator.innerHTML = '<svg class="w-4 h-4 text-gray-400 animate-spin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 1 7.07 2.93l-1.41 1.41A8 8 0 1 0 20 12h2A10 10 0 0 1 12 22 10 10 0 0 1 12 2Z"/></svg><span class="text-gray-500">Saving...</span>';
-      return;
-    }
-    if(state === "error"){
-      saveIndicator.innerHTML = '<svg class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 13h-2v2h2v-2Zm0-10h-2v8h2V5Z"/></svg><span class="text-red-600">Not saved</span>';
-      return;
-    }
-    saveIndicator.innerHTML = '<svg class="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4Z"/></svg><span class="text-green-600">Saved</span>';
-  }
-
-  var timers = {};
-  function scheduleSave(el){
-    var field = el.getAttribute('data-field');
-    if(!field) return;
-    var value = el.value || "";
-    setIndicator("saving");
-    if(timers[field]) clearTimeout(timers[field]);
-    timers[field] = setTimeout(function(){ doSave(field, value); }, 450);
-  }
-
-  function doSave(field, value){
-    fetch(updateURL, {
-      method: "POST",
-      headers: {"Content-Type":"application/json","X-CSRF-Token": (window.attentionCsrfToken ? window.attentionCsrfToken() : "")},
-      body: JSON.stringify({field: field, value: value})
-    }).then(function(res){
-      if(!res.ok) throw new Error("bad status");
-      return res.json();
-    }).then(function(){
-      setIndicator("saved");
-    }).catch(function(){
-      setIndicator("error");
-    });
-  }
-
-  var fields = document.querySelectorAll('[data-field]');
-  fields.forEach(function(el){
-    el.addEventListener('input', function(){ scheduleSave(el); });
-    el.addEventListener('blur', function(){
-      var field = el.getAttribute('data-field');
-      if(timers[field]) { clearTimeout(timers[field]); timers[field]=null; }
-      doSave(field, el.value || "");
-    });
-  });
-
-  var addMore = document.getElementById('add-more-btn');
-  var optional = document.getElementById('optional-fields');
-  if (addMore && optional) addMore.addEventListener('click', function(){ optional.classList.toggle('hidden'); });
-
-  var toggle = document.getElementById('follow-up-toggle');
-  var container = document.getElementById('follow-up-date-container');
-  var dueInput = document.getElementById('follow-up-due-at');
-  function syncFollowup(){
-    if (!toggle || !container) return;
-    var on = !!toggle.checked;
-    container.classList.toggle('hidden', !on);
-    if(dueInput){
-      // Avoid browser validation lockups when a required input is hidden.
-      dueInput.disabled = !on;
-      dueInput.required = on;
-      if(!on){ dueInput.value = ""; }
-    }
-  }
-  if (toggle && container){
-    syncFollowup();
-    toggle.addEventListener('change', syncFollowup);
-  }
-})();
-</script>`)
-
 	return template.HTML(b.String())
 }
 
@@ -262,8 +182,8 @@ func renderContactHeader(tenant control.Tenant, contact tenantdb.Contact) templa
 	}
 	fallbackEsc := template.HTMLEscapeString(fallback)
 	var b strings.Builder
-	b.WriteString(`<header id="header" class="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">`)
-	b.WriteString(`<div class="flex items-center justify-between max-w-4xl mx-auto">`)
+	b.WriteString(`<div id="contact-toolbar" class="mb-6">`)
+	b.WriteString(`<div class="flex items-center justify-between">`)
 	b.WriteString(`<div class="flex items-center space-x-4">`)
 	b.WriteString(`<a href="/t/` + tenantSlugEsc + `/app" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Back">`)
 	b.WriteString(`<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.7 6.3 13.3 4.9 6.2 12l7.1 7.1 1.4-1.4L9 12l5.7-5.7Z"/></svg>`)
@@ -286,10 +206,7 @@ func renderContactHeader(tenant control.Tenant, contact tenantdb.Contact) templa
 	b.WriteString(`</button>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<div class="max-w-4xl mx-auto">`)
-	b.WriteString(string(renderOmniBar(tenant, "", "header")))
 	b.WriteString(`</div>`)
-	b.WriteString(`</header>`)
 	return template.HTML(b.String())
 }
 

@@ -4,6 +4,7 @@ import (
 	"attention-crm/internal/control"
 	"attention-crm/internal/tenantdb"
 	"fmt"
+	"html/template"
 	"net/http"
 	"time"
 )
@@ -25,10 +26,17 @@ func (s *Server) handleExportPage(w http.ResponseWriter, r *http.Request, tenant
 		s.internalError(w, r, err)
 		return
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+	db, err := s.openTenantDB(tenant.DBPath)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	defer db.Close()
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
 		Title:     "Export",
+		TenantSlug: tenant.Slug,
 		OmniBar:   renderOmniBar(tenant, "", "header"),
-		Body:      body,
+		Body:      template.HTML(`<div class="max-w-5xl mx-auto px-4 py-6 lg:px-6">` + string(body) + `</div>`),
 		CSRFToken: csrf,
 	})
 }

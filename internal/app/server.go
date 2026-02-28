@@ -221,11 +221,13 @@ type session struct {
 
 type pageData struct {
 	Title     string
+	TenantSlug string
 	Header    template.HTML
 	OmniBar   template.HTML
 	MainID    string
 	MainClass string
 	Body      template.HTML
+	Rail      template.HTML
 	CSRFToken string
 }
 

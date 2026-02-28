@@ -37,8 +37,9 @@ func (s *Server) handleMembersPage(w http.ResponseWriter, r *http.Request, tenan
 		s.internalError(w, r, err)
 		return
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
 		Title:     "Members",
+		TenantSlug: tenant.Slug,
 		OmniBar:   renderOmniBar(tenant, "", "header"),
 		Body:      body,
 		CSRFToken: csrf,

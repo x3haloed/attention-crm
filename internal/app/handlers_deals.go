@@ -1,6 +1,7 @@
 package app
 
 import (
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -58,12 +59,12 @@ func (s *Server) handleDealDesk(w http.ResponseWriter, r *http.Request, tenant c
 		s.internalError(w, r, err)
 		return
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
 		Title:     "Deal",
+		TenantSlug: tenant.Slug,
 		OmniBar:   renderOmniBar(tenant, "", "header"),
 		MainID:    "main-content",
-		MainClass: "max-w-4xl mx-auto px-4 py-6 lg:px-6",
-		Body:      body,
+		Body:      template.HTML(`<div class="max-w-4xl mx-auto px-4 py-6 lg:px-6">` + string(body) + `</div>`),
 		CSRFToken: csrf,
 	})
 }

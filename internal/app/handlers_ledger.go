@@ -3,6 +3,7 @@ package app
 import (
 	"attention-crm/internal/control"
 	"attention-crm/internal/tenantdb"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,7 +54,6 @@ func (s *Server) handleLedgerTimeline(w http.ResponseWriter, r *http.Request, te
 		return
 	}
 
-	header := renderTopNavHeader(tenant)
 	body := renderLedgerTimelineBody(tenant, events, ledgerFilterState{
 		ActorKind:  actor,
 		Op:         op,
@@ -66,13 +66,12 @@ func (s *Server) handleLedgerTimeline(w http.ResponseWriter, r *http.Request, te
 		s.internalError(w, r, err)
 		return
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
 		Title:     "Ledger",
-		Header:    header,
+		TenantSlug: tenant.Slug,
+		OmniBar:   renderOmniBar(tenant, "", "header"),
 		MainID:    "main-content",
-		MainClass: "max-w-5xl mx-auto px-4 py-6 lg:px-6",
-		Body:      body,
+		Body:      template.HTML(`<div class="max-w-5xl mx-auto px-4 py-6 lg:px-6">` + string(body) + `</div>`),
 		CSRFToken: csrf,
 	})
 }
-

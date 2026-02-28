@@ -12,8 +12,8 @@ import (
 func renderDealsPipelineHeader(tenant control.Tenant) template.HTML {
 	tenantSlugEsc := template.HTMLEscapeString(tenant.Slug)
 	var b strings.Builder
-	b.WriteString(`<header id="header" class="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">`)
-	b.WriteString(`<div class="flex items-center justify-between max-w-4xl mx-auto">`)
+	b.WriteString(`<div id="deals-toolbar" class="mb-6">`)
+	b.WriteString(`<div class="flex items-center justify-between">`)
 	b.WriteString(`<div class="flex items-center space-x-4">`)
 	b.WriteString(`<a href="/t/` + tenantSlugEsc + `/app" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Back">`)
 	b.WriteString(`<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14.7 6.3 13.3 4.9 6.2 12l7.1 7.1 1.4-1.4L9 12l5.7-5.7Z"/></svg>`)
@@ -24,10 +24,7 @@ func renderDealsPipelineHeader(tenant control.Tenant) template.HTML {
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
-	b.WriteString(`<div class="max-w-4xl mx-auto">`)
-	b.WriteString(string(renderOmniBar(tenant, "", "header")))
 	b.WriteString(`</div>`)
-	b.WriteString(`</header>`)
 	return template.HTML(b.String())
 }
 

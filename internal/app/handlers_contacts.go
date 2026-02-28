@@ -3,6 +3,7 @@ package app
 import (
 	"attention-crm/internal/control"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -173,12 +174,13 @@ func (s *Server) handleContactDetailWithFlash(w http.ResponseWriter, r *http.Req
 	if title == "" {
 		title = "Contact"
 	}
-	_ = s.tenantApp.ExecuteTemplate(w, "page", pageData{
+
+	s.renderTenantAppPage(w, r, tenant, db, pageData{
 		Title:     title,
-		Header:    header,
+		TenantSlug: tenant.Slug,
+		OmniBar:   renderOmniBar(tenant, "", "header"),
 		MainID:    "main-content",
-		MainClass: "max-w-4xl mx-auto px-4 py-6 lg:px-6",
-		Body:      body,
+		Body:      template.HTML(`<div class="max-w-4xl mx-auto px-4 py-6 lg:px-6">` + string(header) + string(body) + `</div>`),
 		CSRFToken: csrf,
 	})
 }
