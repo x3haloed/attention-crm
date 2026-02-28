@@ -279,7 +279,7 @@ func (s *Server) handleQuickCreateContact(w http.ResponseWriter, r *http.Request
 	}
 	defer db.Close()
 
-	if err := db.CreateContact(name, email, phone, "", ""); err != nil {
+	if _, err := db.CreateContactBy(sess.UserID, name, email, phone, "", ""); err != nil {
 		if wantsJSON {
 			s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "contact creation failed"})
 			return

@@ -2,6 +2,7 @@ package tenantdb
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -16,6 +17,10 @@ func (s *Store) CreateInteractionBy(actorUserID int64, contactID int64, interact
 	if err != nil {
 		return err
 	}
+	// Ensure contact exists in current projection.
+	if _, err := s.ContactByID(contactID); err != nil {
+		return err
+	}
 	interactionType = strings.TrimSpace(strings.ToLower(interactionType))
 	switch interactionType {
 	case "note", "call", "email", "meeting":
@@ -27,7 +32,7 @@ func (s *Store) CreateInteractionBy(actorUserID int64, contactID int64, interact
 		return errors.New("content required")
 	}
 
-	var dueAtStr any
+	var dueAtStr string
 	if dueAt != nil {
 		dueAtStr = dueAt.UTC().Format(time.RFC3339)
 	}
@@ -37,28 +42,46 @@ func (s *Store) CreateInteractionBy(actorUserID int64, contactID int64, interact
 	}
 	defer tx.Rollback()
 
-	var actor any
-	if actorUserID > 0 {
-		actor = actorUserID
-	}
-	_, err = tx.Exec(`
-INSERT INTO interactions(workspace_id, contact_id, type, content, due_at, created_by_user_id, updated_by_user_id)
-VALUES(?,?,?,?,?,?,?)
-`, workspaceID, contactID, interactionType, content, dueAtStr, actor, actor)
+	interactionID, err := allocateEntityIDTx(tx, workspaceID, "interaction")
 	if err != nil {
 		return err
 	}
 
-	// Touch contact updated_at so recency-based UIs behave like a real CRM.
-	if _, err := tx.Exec(`
-UPDATE contacts
-SET updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-WHERE id = ? AND workspace_id = ?
-`, contactID, workspaceID); err != nil {
+	payload, _ := json.Marshal(interactionCreatedPayload{
+		ContactID: contactID,
+		Type:      interactionType,
+		Content:   content,
+		DueAt:     strings.TrimSpace(dueAtStr),
+	})
+
+	createdAt := time.Now().UTC()
+	var actor any
+	if actorUserID > 0 {
+		actor = actorUserID
+	}
+	if _, err := appendLedgerEventExec(
+		tx,
+		workspaceID,
+		1,
+		createdAt.Format(time.RFC3339Nano),
+		ActorKindHuman,
+		actor,
+		"interaction.created",
+		"interaction",
+		interactionID,
+		string(payload),
+		"",
+		"",
+		nil, nil, nil,
+		nil,
+	); err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.ApplyProjection(InteractionsProjection{})
 }
 
 func (s *Store) ListRecentInteractions(limit int) ([]Interaction, error) {
@@ -163,50 +186,41 @@ func (s *Store) MarkInteractionCompleteBy(actorUserID int64, interactionID int64
 	if err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var contactID int64
-	row := tx.QueryRow(`SELECT contact_id FROM interactions WHERE id = ? AND workspace_id = ?`, interactionID, workspaceID)
-	if err := row.Scan(&contactID); err != nil {
+	// Validate it exists in the current projection.
+	if err := s.db.QueryRow(`SELECT id FROM interactions WHERE id = ? AND workspace_id = ? AND completed_at IS NULL`, interactionID, workspaceID).Scan(new(int64)); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("interaction not found or already completed")
 		}
 		return err
 	}
 
-	var actor any
+	createdAt := time.Now().UTC()
+	var entityID = interactionID
+	actorKind := ActorKindHuman
+	var actorUser any
 	if actorUserID > 0 {
-		actor = actorUserID
+		actorUser = actorUserID
 	}
-	res, err := tx.Exec(`
-UPDATE interactions
-SET completed_at = ?, updated_by_user_id = COALESCE(?, updated_by_user_id)
-WHERE id = ? AND workspace_id = ? AND completed_at IS NULL
-`, time.Now().UTC().Format(time.RFC3339), actor, interactionID, workspaceID)
+	_, err = appendLedgerEventExec(
+		s.db,
+		workspaceID,
+		1,
+		createdAt.Format(time.RFC3339Nano),
+		actorKind,
+		actorUser,
+		"interaction.completed",
+		"interaction",
+		entityID,
+		`{}`,
+		"",
+		"",
+		nil, nil, nil,
+		nil,
+	)
 	if err != nil {
 		return err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return errors.New("interaction not found or already completed")
-	}
-
-	if _, err := tx.Exec(`
-UPDATE contacts
-SET updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-WHERE id = ? AND workspace_id = ?
-`, contactID, workspaceID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return s.ApplyProjection(InteractionsProjection{})
 }
 
 func (s *Store) ListInteractionsByContact(contactID int64, limit int) ([]Interaction, error) {

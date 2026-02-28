@@ -45,7 +45,7 @@ func (s *Server) handleCreateContact(w http.ResponseWriter, r *http.Request, ten
 		return
 	}
 
-	err = db.CreateContact(name, email, phone, company, notes)
+	_, err = db.CreateContactBy(sess.UserID, name, email, phone, company, notes)
 	if err != nil {
 		s.handleApp(w, r, tenant, appViewState{Flash: "Contact creation failed: " + err.Error(), Duplicates: dups})
 		return
@@ -102,7 +102,7 @@ func (s *Server) handleUpdateContact(w http.ResponseWriter, r *http.Request, ten
 	}
 	defer db.Close()
 
-	updatedAt, err := db.UpdateContactField(contactID, payload.Field, payload.Value)
+	updatedAt, err := db.UpdateContactFieldBy(sess.UserID, contactID, payload.Field, payload.Value)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			http.NotFound(w, r)

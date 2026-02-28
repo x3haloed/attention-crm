@@ -81,7 +81,7 @@ func (s *Server) handleUniversalInput(w http.ResponseWriter, r *http.Request, te
 	}
 
 	if looksLikeContactName(query) {
-		if err := db.CreateContact(query, "", "", "", ""); err != nil {
+		if _, err := db.CreateContactBy(sess.UserID, query, "", "", "", ""); err != nil {
 			s.handleApp(w, r, tenant, appViewState{Flash: "Could not create contact: " + err.Error(), UniversalText: query})
 			return
 		}

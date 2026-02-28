@@ -194,6 +194,14 @@ CREATE TABLE IF NOT EXISTS projection_cursors (
   FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
 );
 
+CREATE TABLE IF NOT EXISTS entity_id_counters (
+  workspace_id INTEGER NOT NULL,
+  entity_type TEXT NOT NULL,
+  next_id INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY(workspace_id, entity_type),
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+);
+
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   workspace_id INTEGER NOT NULL,

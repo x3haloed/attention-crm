@@ -115,9 +115,9 @@ func (s *Server) ensureDevFixture() error {
 
 	existing, _ := db.SearchContacts("Sarah", 1)
 	if len(existing) == 0 {
-		_ = db.CreateContact("Sarah Chen", "sarah.chen@acmecorp.com", "+1 (555) 123-4567", "Acme Corporation", "")
-		_ = db.CreateContact("Bob Smith", "bob@betacorp.com", "", "Beta Corp", "")
-		_ = db.CreateContact("Alex Johnson", "alex@startup.io", "", "Startup.io", "")
+		_, _ = db.CreateContactBy(1, "Sarah Chen", "sarah.chen@acmecorp.com", "+1 (555) 123-4567", "Acme Corporation", "")
+		_, _ = db.CreateContactBy(1, "Bob Smith", "bob@betacorp.com", "", "Beta Corp", "")
+		_, _ = db.CreateContactBy(1, "Alex Johnson", "alex@startup.io", "", "Startup.io", "")
 	}
 
 	var sarahContactID int64

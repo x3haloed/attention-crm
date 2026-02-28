@@ -89,7 +89,40 @@ func (s *Store) AppendLedgerEvent(in AppendLedgerEventInput) (int64, error) {
 		idempotency = key
 	}
 
-	res, err := s.db.Exec(`
+	return appendLedgerEventExec(
+		s.db, workspaceID,
+		eventVersion, createdAt.Format(time.RFC3339Nano),
+		in.ActorKind, actor,
+		in.Op, in.EntityType, entityID,
+		in.PayloadJSON, in.Reason, in.EvidenceJSON,
+		causedBy, replaces, inverseOf,
+		idempotency,
+	)
+}
+
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func appendLedgerEventExec(
+	ex execer,
+	workspaceID int64,
+	eventVersion int,
+	createdAt string,
+	actorKind string,
+	actorUserID any,
+	op string,
+	entityType string,
+	entityID any,
+	payloadJSON string,
+	reason string,
+	evidenceJSON string,
+	causedBy any,
+	replaces any,
+	inverseOf any,
+	idempotency any,
+) (int64, error) {
+	res, err := ex.Exec(`
 INSERT INTO ledger_events(
   workspace_id, event_version, created_at,
   actor_kind, actor_user_id,
@@ -98,10 +131,10 @@ INSERT INTO ledger_events(
   caused_by_event_id, replaces_event_id, inverse_of_event_id,
   idempotency_key
 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-`, workspaceID, eventVersion, createdAt.Format(time.RFC3339Nano),
-		in.ActorKind, actor,
-		in.Op, in.EntityType, entityID,
-		in.PayloadJSON, in.Reason, in.EvidenceJSON,
+`, workspaceID, eventVersion, createdAt,
+		actorKind, actorUserID,
+		op, entityType, entityID,
+		payloadJSON, reason, evidenceJSON,
 		causedBy, replaces, inverseOf,
 		idempotency,
 	)

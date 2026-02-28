@@ -2,12 +2,19 @@ package tenantdb
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
+	"time"
 )
 
 func (s *Store) CreateContact(name, email, phone, company, notes string) error {
+	_, err := s.CreateContactBy(0, name, email, phone, company, notes)
+	return err
+}
+
+func (s *Store) CreateContactBy(actorUserID int64, name, email, phone, company, notes string) (int64, error) {
 	name = strings.TrimSpace(name)
 	email = strings.ToLower(strings.TrimSpace(email))
 	phone = strings.TrimSpace(phone)
@@ -15,22 +22,68 @@ func (s *Store) CreateContact(name, email, phone, company, notes string) error {
 	notes = strings.TrimSpace(notes)
 
 	if name == "" && email == "" && phone == "" {
-		return errors.New("contact requires name, email, or phone")
+		return 0, errors.New("contact requires name, email, or phone")
 	}
 
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {
-		return err
+		return 0, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	contactID, err := allocateEntityIDTx(tx, workspaceID, "contact")
+	if err != nil {
+		return 0, err
 	}
 
-	_, err = s.db.Exec(`
-INSERT INTO contacts(workspace_id, name, email, phone, company, notes)
-VALUES(?,?,?,?,?,?)
-`, workspaceID, name, email, phone, company, notes)
-	return err
+	payload, _ := json.Marshal(contactCreatedPayload{
+		Name:    name,
+		Email:   email,
+		Phone:   phone,
+		Company: company,
+		Notes:   notes,
+	})
+	var actor any
+	if actorUserID > 0 {
+		actor = actorUserID
+	}
+	if _, err := appendLedgerEventExec(
+		tx,
+		workspaceID,
+		1,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		ActorKindHuman,
+		actor,
+		"contact.created",
+		"contact",
+		contactID,
+		string(payload),
+		"",
+		"",
+		nil, nil, nil,
+		nil,
+	); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	if err := s.ApplyProjection(ContactsProjection{}); err != nil {
+		return 0, err
+	}
+	return contactID, nil
 }
 
 func (s *Store) UpdateContactField(contactID int64, field, value string) (string, error) {
+	return s.UpdateContactFieldBy(0, contactID, field, value)
+}
+
+func (s *Store) UpdateContactFieldBy(actorUserID int64, contactID int64, field, value string) (string, error) {
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {
 		return "", err
@@ -50,17 +103,26 @@ func (s *Store) UpdateContactField(contactID int64, field, value string) (string
 		return "", errors.New("invalid field")
 	}
 
-	res, err := s.db.Exec(`
-UPDATE contacts
-SET `+field+` = ?, updated_at = (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-WHERE id = ? AND workspace_id = ?
-`, value, contactID, workspaceID)
-	if err != nil {
+	// Verify exists in the current projection before writing the event.
+	if _, err := s.ContactByID(contactID); err != nil {
 		return "", err
 	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return "", errors.New("contact not found")
+
+	payload, _ := json.Marshal(contactFieldSetPayload{Field: field, Value: value})
+	in := AppendLedgerEventInput{
+		ActorKind:   ActorKindHuman,
+		ActorUserID: actorUserID,
+		Op:          "contact.field.set",
+		EntityType:  "contact",
+		EntityID:    &contactID,
+		PayloadJSON: string(payload),
+		CreatedAt:   ptrTime(time.Now().UTC()),
+	}
+	if _, err := s.AppendLedgerEvent(in); err != nil {
+		return "", err
+	}
+	if err := s.ApplyProjection(ContactsProjection{}); err != nil {
+		return "", err
 	}
 
 	var updatedAt string
