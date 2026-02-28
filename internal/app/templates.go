@@ -156,43 +156,44 @@ const tenantAuthTemplate = `{{define "body"}}
 
 const tenantAppTemplate = `{{define "body"}}
   <div id="app-container" class="min-h-screen bg-gray-50">
-	      <header id="header" class="bg-white border-b border-gray-200 px-6 py-4">
-	        <div class="flex items-center justify-between max-w-7xl mx-auto">
-	          <div class="flex items-center space-x-8">
-	            <a href="{{if .TenantSlug}}/t/{{.TenantSlug}}/app{{else}}#{{end}}" class="flex items-center space-x-2">
-              <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M13 2 3 14h7l-1 8 12-14h-7l1-6z"></path>
-                </svg>
-              </div>
-              <span class="text-xl font-semibold text-gray-900">Attention CRM</span>
-            </a>
-            <nav class="hidden sm:flex items-center space-x-4 text-sm">
-              <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/app">Home</a>
-              <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/deals">Deals</a>
-              <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/ledger">Ledger</a>
-              <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/members">Members</a>
-              <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/export">Export</a>
-            </nav>
-          </div>
-	          <div class="flex items-center space-x-4">
-	            <button type="button" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Notifications">
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z"></path>
-              </svg>
-            </button>
-	            <div class="w-8 h-8 rounded-full bg-gray-200"></div>
-	          </div>
-	        </div>
-	        {{if .OmniBar}}
-	          <div class="max-w-7xl mx-auto pt-4">
-	            {{.OmniBar}}
-	          </div>
-	        {{end}}
-	      </header>
-    <div class="max-w-7xl mx-auto px-6 py-8">
+    <div class="max-w-7xl mx-auto px-6 py-6">
       <div class="flex flex-col lg:flex-row items-start gap-6">
-        <div id="desk-root" data-attention-title="{{.Title}}" class="relative flex-1 min-w-0">
+        <div class="flex-1 min-w-0 w-full">
+          <header id="header" class="bg-white border border-gray-200 rounded-2xl px-6 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-8">
+                <a href="{{if .TenantSlug}}/t/{{.TenantSlug}}/app{{else}}#{{end}}" class="flex items-center space-x-2">
+                  <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M13 2 3 14h7l-1 8 12-14h-7l1-6z"></path>
+                    </svg>
+                  </div>
+                  <span class="text-xl font-semibold text-gray-900">Attention CRM</span>
+                </a>
+                <nav class="hidden sm:flex items-center space-x-4 text-sm">
+                  <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/app">Home</a>
+                  <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/deals">Deals</a>
+                  <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/ledger">Ledger</a>
+                  <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/members">Members</a>
+                  <a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/{{.TenantSlug}}/export">Export</a>
+                </nav>
+              </div>
+              <div class="flex items-center space-x-4">
+                <button type="button" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg" aria-label="Notifications">
+                  <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z"></path>
+                  </svg>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+              </div>
+            </div>
+          </header>
+          {{if .OmniBar}}
+            <div class="my-6">
+              {{.OmniBar}}
+            </div>
+          {{end}}
+          <div id="desk-root" data-attention-title="{{.Title}}" class="relative min-w-0">
           <div id="desk-loading-overlay" class="hidden absolute inset-0 z-20 bg-gray-50/80 backdrop-blur-[1px]">
             <div class="h-full w-full flex items-start justify-center px-4 py-10">
               <div class="w-full max-w-3xl">
@@ -232,6 +233,7 @@ const tenantAppTemplate = `{{define "body"}}
           <main id="{{if .MainID}}{{.MainID}}{{else}}main-workspace{{end}}" class="{{if .MainClass}}{{.MainClass}}{{else}}min-w-0 w-full{{end}}">
             {{.Body}}
           </main>
+        </div>
         </div>
         <aside id="agent-rail" class="w-full lg:w-1/3 lg:flex-none min-w-0">
           {{.Rail}}
