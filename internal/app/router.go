@@ -87,6 +87,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleExportInteractionsCSV(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/export/deals.csv":
 		s.handleExportDealsCSV(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/ledger":
+		s.handleLedgerTimeline(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/contacts":
 		s.handleCreateContact(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/contacts/quick":

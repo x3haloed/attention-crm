@@ -25,6 +25,7 @@ func renderTopNavHeaderWithOmniBar(tenant control.Tenant, omni template.HTML) te
 	b.WriteString(`<nav class="hidden sm:flex items-center space-x-4 text-sm">`)
 	b.WriteString(`<a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/` + tenantSlugEsc + `/app">Home</a>`)
 	b.WriteString(`<a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/` + tenantSlugEsc + `/deals">Deals</a>`)
+	b.WriteString(`<a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/` + tenantSlugEsc + `/ledger">Ledger</a>`)
 	b.WriteString(`<a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/` + tenantSlugEsc + `/members">Members</a>`)
 	b.WriteString(`<a class="text-gray-600 hover:text-gray-900 font-medium" href="/t/` + tenantSlugEsc + `/export">Export</a>`)
 	b.WriteString(`</nav>`)

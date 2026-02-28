@@ -301,6 +301,84 @@ LIMIT ?
 	return out, rows.Err()
 }
 
+type LedgerEventFilter struct {
+	ActorKind  string
+	Op         string
+	EntityType string
+	EntityID   *int64
+	Limit      int
+}
+
+func (s *Store) ListLedgerEventsFiltered(f LedgerEventFilter) ([]LedgerEvent, error) {
+	limit := f.Limit
+	if limit <= 0 || limit > 5000 {
+		limit = 200
+	}
+	workspaceID, err := s.primaryWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
+
+	var where []string
+	args := []any{workspaceID}
+
+	where = append(where, "workspace_id = ?")
+	if actor := strings.TrimSpace(strings.ToLower(f.ActorKind)); actor != "" {
+		where = append(where, "actor_kind = ?")
+		args = append(args, actor)
+	}
+	if op := strings.TrimSpace(f.Op); op != "" {
+		where = append(where, "op = ?")
+		args = append(args, op)
+	}
+	if et := strings.TrimSpace(f.EntityType); et != "" {
+		where = append(where, "entity_type = ?")
+		args = append(args, et)
+	}
+	if f.EntityID != nil {
+		where = append(where, "entity_id = ?")
+		args = append(args, *f.EntityID)
+	}
+	args = append(args, limit)
+
+	rows, err := s.db.Query(`
+SELECT
+  id, event_version,
+  actor_kind, actor_user_id,
+  op, entity_type, entity_id,
+  payload_json, reason, evidence_json,
+  caused_by_event_id, replaces_event_id, inverse_of_event_id,
+  idempotency_key,
+  created_at
+FROM ledger_events
+WHERE `+strings.Join(where, " AND ")+`
+ORDER BY created_at DESC, id DESC
+LIMIT ?
+`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LedgerEvent
+	for rows.Next() {
+		var ev LedgerEvent
+		if err := rows.Scan(
+			&ev.ID, &ev.EventVersion,
+			&ev.ActorKind, &ev.ActorUserID,
+			&ev.Op, &ev.EntityType, &ev.EntityID,
+			&ev.PayloadJSON, &ev.Reason, &ev.EvidenceJSON,
+			&ev.CausedByEventID, &ev.ReplacesEventID, &ev.InverseOfEventID,
+			&ev.IdempotencyKey,
+			&ev.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) LedgerEventByID(eventID int64) (*LedgerEvent, error) {
 	workspaceID, err := s.primaryWorkspaceID()
 	if err != nil {
