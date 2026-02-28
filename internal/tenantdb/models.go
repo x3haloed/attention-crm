@@ -141,6 +141,22 @@ type LedgerEvent struct {
 	CreatedAt       string
 }
 
+type OutboxEffect struct {
+	ID               int64
+	Kind             string
+	Status           string
+	EmailEntityID    sql.NullInt64
+	CommitEventID    int64
+	ExternalEffectID string
+	PayloadJSON      string
+	AttemptCount     int
+	NextAttemptAt    sql.NullString
+	LastError        string
+	CreatedAt        string
+	UpdatedAt        string
+	SentAt           sql.NullString
+}
+
 type Invite struct {
 	ID          int64
 	Email       string

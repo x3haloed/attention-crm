@@ -202,6 +202,34 @@ CREATE TABLE IF NOT EXISTS entity_id_counters (
   FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
 );
 
+CREATE TABLE IF NOT EXISTS outbox_effects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','sent','failed','canceled')),
+
+  email_entity_id INTEGER,
+  commit_event_id INTEGER NOT NULL,
+  external_effect_id TEXT NOT NULL,
+
+  payload_json TEXT NOT NULL DEFAULT '',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT,
+  last_error TEXT NOT NULL DEFAULT '',
+
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  sent_at TEXT,
+
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(commit_event_id) REFERENCES ledger_events(id),
+  UNIQUE(workspace_id, commit_event_id),
+  UNIQUE(workspace_id, external_effect_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_effects_pending
+  ON outbox_effects(workspace_id, status, next_attempt_at, id);
+
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   workspace_id INTEGER NOT NULL,

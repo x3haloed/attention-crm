@@ -176,6 +176,20 @@ func (s *Server) ensureDevFixture() error {
 		appendSpine("current", "Email Draft", "Drafting follow-up email from meeting notes.", now.Add(-15*time.Second), string(detail), "draft", "email_draft", nil)
 	}
 
+	externalEffects, _ := db.ListLedgerEventsFiltered(tenantdb.LedgerEventFilter{
+		ActorKind:  "",
+		Op:         "email.send.committed",
+		EntityType: "email",
+		Limit:      1,
+	})
+	if len(externalEffects) == 0 {
+		_, _, _, _ = db.CreateEmailSendCommitted(1, "john.doe@company.com", "Meeting Follow-up and Next Steps", []string{
+			"Dear John,",
+			"Thank you for taking the time to meet with me yesterday. I wanted to follow up on our discussion about the upcoming project timeline.",
+			"Looking forward to hearing your thoughts and moving this project forward together...",
+		})
+	}
+
 	return nil
 }
 

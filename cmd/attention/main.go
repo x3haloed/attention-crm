@@ -32,6 +32,11 @@ func main() {
 				log.Fatalf("restore: %v", err)
 			}
 			return
+		case "outbox":
+			if err := runOutbox(os.Args[2:]); err != nil {
+				log.Fatalf("outbox: %v", err)
+			}
+			return
 		case "rebuild":
 			if err := runRebuild(os.Args[2:]); err != nil {
 				log.Fatalf("rebuild: %v", err)
@@ -277,10 +282,65 @@ func runRebuild(args []string) error {
 		if err := db.RebuildProjection(tenantdb.ActivityEventsProjection{}); err != nil {
 			return err
 		}
+	case "outbox":
+		if err := db.RebuildProjection(tenantdb.OutboxProjection{}); err != nil {
+			return err
+		}
+	case "contacts":
+		if err := db.RebuildProjection(tenantdb.ContactsProjection{}); err != nil {
+			return err
+		}
+	case "interactions":
+		if err := db.RebuildProjection(tenantdb.InteractionsProjection{}); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unknown projection: %s", name)
 	}
 
 	fmt.Printf("rebuilt projection %s for tenant %s\n", name, slug)
+	return nil
+}
+
+func runOutbox(args []string) error {
+	cfg := app.ConfigFromEnv()
+	applyGlobalOverrides(&cfg, args)
+
+	fs := flag.NewFlagSet("outbox", flag.ContinueOnError)
+	tenantSlug := fs.String("tenant", "", "tenant slug to process outbox for (required)")
+	limit := fs.Int("limit", 25, "max pending effects to process")
+	if err := fs.Parse(stripGlobalFlags(args)); err != nil {
+		return err
+	}
+
+	slug := strings.TrimSpace(*tenantSlug)
+	if slug == "" {
+		return fmt.Errorf("missing --tenant")
+	}
+
+	store, err := control.Open(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	tenant, err := store.TenantBySlug(slug)
+	if err != nil {
+		return err
+	}
+	db, err := tenantdb.Open(tenant.DBPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Ensure outbox projection is up to date before processing.
+	_ = db.ApplyProjection(tenantdb.OutboxProjection{})
+
+	res, err := db.ProcessOutboxOnce(*limit)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("outbox processed=%d sent=%d failed=%d\n", res.Processed, res.Sent, res.Failed)
 	return nil
 }
