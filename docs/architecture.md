@@ -15,6 +15,15 @@ This document turns `mvp-def.md` into a concrete build plan for an **open-core**
 - “Needs Attention”: due follow-ups surface and can be marked complete.
 - Simple deployment: **one downloadable binary** that runs the whole app (API + UI) with SQLite (WAL).
 
+## Trust primitives (ledger-first)
+
+This product’s differentiator is trust: **legibility + reversibility + witness-paced commits**.
+
+We therefore adopt an append-only mutual ledger (human + agent) as a core primitive, with rebuildable
+projections and event-shaped undo/redo.
+
+See `docs/mutual-ledger.md`.
+
 ## Deployment modes
 
 ### Self-host (primary developer/test loop)
