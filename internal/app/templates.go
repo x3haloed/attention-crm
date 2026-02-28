@@ -46,6 +46,66 @@ const tenantBaseTemplate = `{{define "page"}}<!doctype html>
       return m ? (m.getAttribute("content") || "") : "";
     };
   </script>
+  <script>
+    // Desk loading UX (used by fragment navigation; harmless without it).
+    (function () {
+      function $(sel) { return document.querySelector(sel); }
+      var slowTimer = null;
+      var lastNavHref = "";
+
+      function setDeskLoading(loading, opts) {
+        opts = opts || {};
+        var root = $("#desk-root");
+        if (!root) return;
+        var overlay = $("#desk-loading-overlay");
+        if (!overlay) return;
+
+        if (!loading) {
+          root.classList.remove("attention-desk-loading");
+          overlay.classList.add("hidden");
+          var slow = $("#desk-slow-indicator");
+          if (slow) slow.classList.add("hidden");
+          var err = $("#desk-error");
+          if (err) err.classList.add("hidden");
+          if (slowTimer) { clearTimeout(slowTimer); slowTimer = null; }
+          return;
+        }
+
+        lastNavHref = (opts.href || lastNavHref || "");
+        var retry = $("#desk-retry");
+        if (retry) retry.setAttribute("href", lastNavHref || window.location.href);
+
+        root.classList.add("attention-desk-loading");
+        overlay.classList.remove("hidden");
+
+        var slow = $("#desk-slow-indicator");
+        if (slow) slow.classList.add("hidden");
+        if (slowTimer) clearTimeout(slowTimer);
+        slowTimer = setTimeout(function () {
+          var slow2 = $("#desk-slow-indicator");
+          if (slow2) slow2.classList.remove("hidden");
+        }, 650);
+      }
+
+      function setDeskError(message, href) {
+        setDeskLoading(true, { href: href });
+        var err = $("#desk-error");
+        if (!err) return;
+        var msg = $("#desk-error-message");
+        if (msg) msg.textContent = message || "Load failed.";
+        err.classList.remove("hidden");
+      }
+
+      window.attentionDesk = window.attentionDesk || {};
+      window.attentionDesk.setLoading = setDeskLoading;
+      window.attentionDesk.setError = setDeskError;
+      window.attentionDesk.noteNavHref = function (href) { lastNavHref = href || ""; };
+
+      window.addEventListener("attention:desk:swap", function () {
+        setDeskLoading(false);
+      });
+    })();
+  </script>
 </head>
 <body class="bg-gray-50 font-sans">
   {{template "body" .}}
@@ -101,7 +161,43 @@ const tenantAppTemplate = `{{define "body"}}
 	        {{end}}
 	      </header>
 	    {{end}}
-    <div id="desk-root" data-attention-title="{{.Title}}">
+    <div id="desk-root" data-attention-title="{{.Title}}" class="relative">
+      <div id="desk-loading-overlay" class="hidden absolute inset-0 z-20 bg-gray-50/80 backdrop-blur-[1px]">
+        <div class="h-full w-full flex items-start justify-center px-4 py-10">
+          <div class="w-full max-w-3xl">
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+              <div class="flex items-center justify-between">
+                <div class="h-4 w-44 bg-gray-200 rounded animate-pulse"></div>
+                <div class="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+              <div class="mt-6 space-y-3">
+                <div class="h-3 w-full bg-gray-200 rounded animate-pulse"></div>
+                <div class="h-3 w-11/12 bg-gray-200 rounded animate-pulse"></div>
+                <div class="h-3 w-9/12 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+              <div class="mt-6 grid grid-cols-3 gap-3">
+                <div class="h-20 bg-gray-100 border border-gray-200 rounded-xl animate-pulse"></div>
+                <div class="h-20 bg-gray-100 border border-gray-200 rounded-xl animate-pulse"></div>
+                <div class="h-20 bg-gray-100 border border-gray-200 rounded-xl animate-pulse"></div>
+              </div>
+              <div id="desk-slow-indicator" class="hidden mt-6 text-sm text-gray-700">
+                <div class="flex items-center gap-2">
+                  <div class="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                  <span>Still loading…</span>
+                </div>
+              </div>
+              <div id="desk-error" class="hidden mt-6">
+                <div class="text-sm font-medium text-red-700">Couldn’t load this desk.</div>
+                <div id="desk-error-message" class="mt-1 text-sm text-gray-700">Load failed.</div>
+                <div class="mt-3">
+                  <a id="desk-retry" class="text-sm font-medium text-blue-700 hover:text-blue-800 hover:underline" href="#">Retry</a>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 text-xs text-gray-500">Tip: the agent rail should remain responsive during desk loads.</div>
+          </div>
+        </div>
+      </div>
       <main id="{{if .MainID}}{{.MainID}}{{else}}main-workspace{{end}}" class="{{if .MainClass}}{{.MainClass}}{{else}}max-w-7xl mx-auto px-6 py-8{{end}}">
         {{.Body}}
       </main>
