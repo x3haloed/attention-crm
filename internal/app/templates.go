@@ -101,8 +101,10 @@ const tenantAppTemplate = `{{define "body"}}
 	        {{end}}
 	      </header>
 	    {{end}}
-    <main id="{{if .MainID}}{{.MainID}}{{else}}main-workspace{{end}}" class="{{if .MainClass}}{{.MainClass}}{{else}}max-w-7xl mx-auto px-6 py-8{{end}}">
-      {{.Body}}
-    </main>
+    <div id="desk-root" data-attention-title="{{.Title}}">
+      <main id="{{if .MainID}}{{.MainID}}{{else}}main-workspace{{end}}" class="{{if .MainClass}}{{.MainClass}}{{else}}max-w-7xl mx-auto px-6 py-8{{end}}">
+        {{.Body}}
+      </main>
+    </div>
   </div>
 {{end}}`
