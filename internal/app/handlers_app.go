@@ -9,6 +9,7 @@ import (
 )
 
 type spineEvent struct {
+	ActorKind string
 	Title     string
 	Summary   string
 	DetailJSON string
@@ -92,6 +93,7 @@ func splitAgentSpineEvents(events []tenantdb.LedgerEvent) ([]spineEvent, *spineE
 		}
 
 		out := spineEvent{
+			ActorKind:  ev.ActorKind,
 			Title:      title,
 			Summary:    strings.TrimSpace(payload.Summary),
 			DetailJSON: strings.TrimSpace(payload.DetailJSON),

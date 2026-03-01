@@ -24,4 +24,3 @@ func (s *Server) renderTenantAppPage(w http.ResponseWriter, r *http.Request, ten
 	}
 	_ = s.tenantApp.ExecuteTemplate(w, "page", pd)
 }
-

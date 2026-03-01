@@ -139,7 +139,7 @@ func renderContactDetailBody(
 			chip = `<span class="bg-amber-100 text-amber-800 text-xs font-medium px-2 py-1 rounded-full">Due</span>`
 			icon = interactionIcon(it.Type, "due")
 			meta = "Due: " + dueDisplay(it.DueAt.String, now)
-			action = `<form method="POST" action="/t/` + tenantSlugEsc + `/interactions/` + strconv.FormatInt(it.ID, 10) + `/complete" style="margin:0"><button class="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline" type="submit">Mark complete</button></form>`
+			action = `<form method="POST" class="m-0" action="/t/` + tenantSlugEsc + `/interactions/` + strconv.FormatInt(it.ID, 10) + `/complete"><button class="text-xs text-blue-600 hover:text-blue-700 font-medium hover:underline" type="submit">Mark complete</button></form>`
 		}
 
 		b.WriteString(`<div id="` + itemID + `" class="` + itemClass + `">`)

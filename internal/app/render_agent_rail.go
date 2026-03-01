@@ -17,7 +17,7 @@ func renderAgentRail(now time.Time, past []spineEvent, current *spineEvent) temp
 	var b strings.Builder
 
 	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">`)
-	b.WriteString(`<div class="flex flex-col" style="min-height: calc(100vh - 9rem);">`)
+	b.WriteString(`<div class="flex flex-col min-h-[calc(100vh-9rem)]">`)
 
 	b.WriteString(`<div class="p-6 border-b border-gray-200">`)
 	b.WriteString(`<div class="flex flex-col items-center text-center">`)
@@ -70,7 +70,7 @@ func renderAgentActionSpine(now time.Time, past []spineEvent, current *spineEven
 	b.WriteString(`<div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-purple-400"></div>`)
 	b.WriteString(`<div class="space-y-3 sm:space-y-4 min-h-[10rem]">`)
 
-	colors := []struct {
+	agentColors := []struct {
 		dot    string
 		border string
 	}{
@@ -94,12 +94,25 @@ func renderAgentActionSpine(now time.Time, past []spineEvent, current *spineEven
 	// Past (oldest -> newest).
 	for idx := len(past) - 1; idx >= 0; idx-- {
 		ev := past[idx]
-		c := colors[(len(past)-1-idx)%len(colors)]
+		dot := "bg-gray-300"
+		border := "border-gray-200"
+		icon := `<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>`
+
+		if strings.EqualFold(strings.TrimSpace(ev.ActorKind), "agent") {
+			c := agentColors[(len(past)-1-idx)%len(agentColors)]
+			dot = c.dot
+			border = c.border
+		} else if strings.EqualFold(strings.TrimSpace(ev.ActorKind), "human") {
+			dot = "bg-slate-400"
+			border = "border-slate-200"
+			icon = `<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-4.42 0-8 2-8 4.5V21h16v-2.5c0-2.5-3.58-4.5-8-4.5Z"/></svg>`
+		}
+
 		b.WriteString(`<div class="flex items-start space-x-4">`)
-		b.WriteString(`<div class="flex-shrink-0 w-8 h-8 ` + c.dot + ` rounded-full flex items-center justify-center z-10 shadow-lg">`)
-		b.WriteString(`<svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>`)
+		b.WriteString(`<div class="flex-shrink-0 w-8 h-8 ` + dot + ` rounded-full flex items-center justify-center z-10 shadow-lg">`)
+		b.WriteString(icon)
 		b.WriteString(`</div>`)
-		b.WriteString(`<div class="flex-1 bg-white rounded-lg shadow-md px-3 py-2 sm:px-4 sm:py-3 border ` + c.border + `">`)
+		b.WriteString(`<div class="flex-1 bg-white rounded-lg shadow-md px-3 py-2 sm:px-4 sm:py-3 border ` + border + `">`)
 		b.WriteString(`<div class="flex items-center justify-between gap-3">`)
 		b.WriteString(`<span class="text-xs sm:text-sm font-medium text-gray-700">` + template.HTMLEscapeString(ev.Title) + `</span>`)
 		b.WriteString(`<span class="text-xs text-gray-400">` + template.HTMLEscapeString(relativeTime(ev.CreatedAt, now)) + `</span>`)
@@ -185,4 +198,3 @@ func renderAgentActionSpine(now time.Time, past []spineEvent, current *spineEven
 
 	return b.String()
 }
-

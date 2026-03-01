@@ -109,7 +109,7 @@ func renderMembersBody(tenant control.Tenant, userID int64, members []tenantdb.M
 			b.WriteString(`<div class="flex items-center gap-3">`)
 			b.WriteString(`<span class="text-xs font-medium rounded-full px-2 py-0.5 ` + statusClass + `">` + template.HTMLEscapeString(status) + `</span>`)
 			if status == "Pending" || status == "Started" {
-				b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/invites/` + strconv.FormatInt(inv.ID, 10) + `/revoke" style="margin:0">`)
+				b.WriteString(`<form method="POST" class="m-0" action="/t/` + tenantSlugEsc + `/invites/` + strconv.FormatInt(inv.ID, 10) + `/revoke">`)
 				b.WriteString(`<button type="submit" class="text-sm font-medium text-red-600 hover:text-red-700 hover:underline">Revoke</button>`)
 				b.WriteString(`</form>`)
 			}

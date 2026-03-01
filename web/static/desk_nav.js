@@ -145,4 +145,3 @@
     navigateTo(window.location.href, { replace: true, preserveScroll: true });
   });
 })();
-
