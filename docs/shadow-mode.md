@@ -32,9 +32,9 @@ The LLM “conversation” does not accumulate. Every invocation is:
 
 1. `system`: fixed policy + tool contract
 2. `user`: a rope of relevant history (timestamped) + instructions
-3. `assistant`: **tool calls only**
+3. `assistant`: **tool calls only** (function calls)
 
-All assistant text outside `<tool_call>…</tool_call>` is **dropped**.
+Any assistant text that is not part of a tool call is treated as non-authoritative and ignored by the application.
 
 ### Why
 

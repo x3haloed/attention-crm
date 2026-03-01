@@ -121,6 +121,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleCompleteInteraction(w, r, tenant, rest)
 	case r.Method == http.MethodPost && rest == "/universal":
 		s.handleUniversalInput(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/agent/tool-calls":
+		s.handleAgentToolCalls(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/invites":
 		s.handleCreateInvite(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/members":
