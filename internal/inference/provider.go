@@ -62,4 +62,3 @@ func httpClientFor(cfg Config) *http.Client {
 	}
 	return &http.Client{Timeout: to}
 }
-

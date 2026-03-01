@@ -24,7 +24,7 @@ type lmStudioReq struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 	Stream   bool      `json:"stream"`
-	Tools    any       `json:"tools,omitempty"`
+	Tools    []ToolDef `json:"tools,omitempty"`
 }
 
 func (c *lmStudio) Stream(ctx context.Context, req Request, onEvent StreamHandler) (Result, error) {
@@ -143,4 +143,3 @@ func (c *lmStudio) Stream(ctx context.Context, req Request, onEvent StreamHandle
 
 	return Result{OutputText: outText.String(), FunctionCalls: functionCalls}, nil
 }
-

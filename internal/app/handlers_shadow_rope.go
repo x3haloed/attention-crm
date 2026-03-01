@@ -20,7 +20,7 @@ func (s *Server) handleShadowRope(w http.ResponseWriter, r *http.Request, tenant
 	}
 	defer db.Close()
 
-	marker, items, err := s.shadowRopeSnapshot(db, tenant, sess, r)
+	marker, items, _, err := s.shadowRopeSnapshot(db, tenant, sess, r)
 	if err != nil {
 		s.internalError(w, r, err)
 		return

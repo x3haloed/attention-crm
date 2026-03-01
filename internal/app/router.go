@@ -62,6 +62,10 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if sess, ok := s.readSession(r); ok && sess.TenantSlug == tenant.Slug {
+		defer s.kickShadowRunAsync(tenant, sess, r)
+	}
+
 	switch {
 	case r.Method == http.MethodGet && rest == "/login":
 		s.renderLogin(w, slug, "")

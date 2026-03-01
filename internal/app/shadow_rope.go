@@ -49,7 +49,7 @@ func shadowSessionKey(r *http.Request, sess session, tenant control.Tenant) stri
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, sess session, r *http.Request) (shadowRopeMarker, []shadowRopeItem, error) {
+func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, sess session, r *http.Request) (shadowRopeMarker, []shadowRopeItem, int, error) {
 	key := shadowSessionKey(r, sess, tenant)
 
 	s.ropeMu.Lock()
@@ -64,7 +64,7 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 	// Pull a recent window and add any events beyond the cursor. (Cheap v0; can optimize later.)
 	recent, err := db.ListLedgerEventsFiltered(tenantdb.LedgerEventFilter{Limit: 250})
 	if err != nil {
-		return shadowRopeMarker{}, nil, err
+		return shadowRopeMarker{}, nil, 0, err
 	}
 
 	var newEvents []tenantdb.LedgerEvent
@@ -76,6 +76,7 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 	sort.Slice(newEvents, func(i, j int) bool { return newEvents[i].ID < newEvents[j].ID })
 
 	items := make([]shadowRopeItem, 0, len(newEvents))
+	triggerAdded := 0
 	for _, ev := range newEvents {
 		// Pairing: include the current human's events; always include agent/system.
 		if strings.EqualFold(ev.ActorKind, tenantdb.ActorKindHuman) {
@@ -89,6 +90,11 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 		}
 		items = append(items, it)
 		lastSeen = ev.ID
+
+		// Avoid self-trigger loops: agent spine events produced by ui.message should not retrigger shadow mode.
+		if !(strings.EqualFold(ev.ActorKind, tenantdb.ActorKindAgent) && strings.EqualFold(strings.TrimSpace(ev.Op), "agent.spine.event")) {
+			triggerAdded++
+		}
 	}
 
 	s.ropeMu.Lock()
@@ -119,7 +125,7 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 		marker = *state.Marker
 	}
 	outItems := append([]shadowRopeItem(nil), state.Items...)
-	return marker, outItems, nil
+	return marker, outItems, triggerAdded, nil
 }
 
 type ropeContactCreatedPayload struct {

@@ -21,6 +21,51 @@ type uiMessageArgs struct {
 	Summary string `json:"summary,omitempty"`
 }
 
+func applyUIFunctionCalls(db *tenantdb.Store, actorUserID int64, calls []agent.FunctionCall) int {
+	applied := 0
+	for _, c := range calls {
+		if strings.TrimSpace(strings.ToLower(c.Type)) != "function_call" {
+			continue
+		}
+		switch strings.TrimSpace(c.Name) {
+		case "ui.no_action":
+			applied++
+
+		case "ui.message":
+			argsJSON, err := c.NormalizedArguments()
+			if err != nil {
+				continue
+			}
+			var args uiMessageArgs
+			_ = json.Unmarshal(argsJSON, &args)
+			text := strings.TrimSpace(args.Text)
+			if text == "" {
+				continue
+			}
+			title := strings.TrimSpace(args.Title)
+			if title == "" {
+				title = "Agent message"
+			}
+			summary := strings.TrimSpace(args.Summary)
+			if summary == "" {
+				summary = snippet(text, 220)
+			}
+			detail, _ := json.Marshal(map[string]any{
+				"kind": "message",
+				"text": text,
+			})
+			_, _ = db.AppendAgentSpineEvent(actorUserID, tenantdb.AgentSpineEventInput{
+				Status:     "done",
+				Title:      title,
+				Summary:    summary,
+				DetailJSON: string(detail),
+			})
+			applied++
+		}
+	}
+	return applied
+}
+
 func (s *Server) handleAgentToolCalls(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
@@ -50,48 +95,7 @@ func (s *Server) handleAgentToolCalls(w http.ResponseWriter, r *http.Request, te
 	}
 	defer db.Close()
 
-	applied := 0
-	for _, c := range req.FunctionCalls {
-		if strings.TrimSpace(strings.ToLower(c.Type)) != "function_call" {
-			continue
-		}
-		switch strings.TrimSpace(c.Name) {
-		case "ui.no_action":
-			// Explicit no-op.
-			applied++
-
-		case "ui.message":
-			argsJSON, err := c.NormalizedArguments()
-			if err != nil {
-				continue
-			}
-			var args uiMessageArgs
-			_ = json.Unmarshal(argsJSON, &args)
-			text := strings.TrimSpace(args.Text)
-			if text == "" {
-				continue
-			}
-			title := strings.TrimSpace(args.Title)
-			if title == "" {
-				title = "Agent message"
-			}
-			summary := strings.TrimSpace(args.Summary)
-			if summary == "" {
-				summary = snippet(text, 220)
-			}
-			detail, _ := json.Marshal(map[string]any{
-				"kind": "message",
-				"text": text,
-			})
-			_, _ = db.AppendAgentSpineEvent(sess.UserID, tenantdb.AgentSpineEventInput{
-				Status:     "done",
-				Title:      title,
-				Summary:    summary,
-				DetailJSON: string(detail),
-			})
-			applied++
-		}
-	}
+	applied := applyUIFunctionCalls(db, sess.UserID, req.FunctionCalls)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{

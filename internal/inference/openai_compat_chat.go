@@ -30,7 +30,7 @@ type openAIChatReq struct {
 	Messages []Message `json:"messages"`
 	Stream   bool      `json:"stream"`
 	// Tools are supported by OpenAI chat-completions, but shapes vary between providers.
-	Tools any `json:"tools,omitempty"`
+	Tools []ToolDef `json:"tools,omitempty"`
 }
 
 type chatChunk struct {
@@ -70,7 +70,6 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 		Stream:   true,
 	}
 	if len(req.Tools) > 0 {
-		// Pass through tool definitions in a best-effort way.
 		payload.Tools = req.Tools
 	}
 
@@ -177,4 +176,3 @@ func mustJSON(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
 }
-
