@@ -169,6 +169,21 @@ CREATE TABLE IF NOT EXISTS tenants (
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_storage_key ON tenants(storage_key) WHERE storage_key != ''`); err != nil {
 		return fmt.Errorf("migrate control: %w", err)
 	}
+
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS tenant_inference_config (
+  tenant_slug TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  base_url TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL,
+  api_key TEXT NOT NULL DEFAULT '',
+  headers_json TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY(tenant_slug) REFERENCES tenants(slug) ON DELETE CASCADE
+);
+`); err != nil {
+		return fmt.Errorf("migrate control: %w", err)
+	}
 	return nil
 }
 

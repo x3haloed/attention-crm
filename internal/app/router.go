@@ -125,6 +125,12 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentToolCalls(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/agent/rope":
 		s.handleShadowRope(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/agent/infer/config":
+		s.handleInferConfigGet(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/agent/infer/config":
+		s.handleInferConfigPost(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/agent/infer/stream":
+		s.handleInferStream(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/invites":
 		s.handleCreateInvite(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/members":
