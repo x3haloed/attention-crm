@@ -66,7 +66,7 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 
 	payload := openAIChatReq{
 		Model:    model,
-		Messages: req.Messages,
+		Messages: normalizeChatMessages(req.Messages),
 		Stream:   true,
 	}
 	if len(req.Tools) > 0 {
@@ -175,4 +175,21 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 func mustJSON(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+func normalizeChatMessages(in []Message) []Message {
+	out := make([]Message, 0, len(in))
+	for _, m := range in {
+		role := strings.TrimSpace(strings.ToLower(m.Role))
+		if role == "" {
+			role = "user"
+		}
+		// Chat-completions APIs generally support: system, user, assistant.
+		// We treat developer as system for compatibility.
+		if role == "developer" {
+			role = "system"
+		}
+		out = append(out, Message{Role: role, Content: m.Content})
+	}
+	return out
 }

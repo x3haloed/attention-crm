@@ -79,7 +79,7 @@ func (s *Server) shadowRunOnce(tenant control.Tenant, sess session, r *http.Requ
 		return err
 	}
 
-	system := strings.TrimSpace(`
+	dev := strings.TrimSpace(`
 You are an observe-only agent. Do not change system state or take external actions.
 Only respond with tool calls. If you have nothing useful to say, call ui.no_action.
 If you do message the user, call ui.message with a short, helpful note or question.
@@ -97,7 +97,7 @@ If you do message the user, call ui.message with a short, helpful note or questi
 
 	res, err := client.Stream(ctx, inference.Request{
 		Messages: []inference.Message{
-			{Role: "system", Content: system},
+			{Role: "developer", Content: dev},
 			{Role: "user", Content: user},
 		},
 		Tools: tools,

@@ -49,7 +49,8 @@ func New(cfg Config) (Client, error) {
 	case string(ProviderOpenRouter):
 		return newOpenAICompatChat(cfg, "/api/v1/chat/completions"), nil
 	case string(ProviderLMStudio):
-		return newLMStudio(cfg), nil
+		// LM Studio exposes an OpenAI-compatible API at /v1/chat/completions.
+		return newOpenAICompatChat(cfg, "/v1/chat/completions"), nil
 	default:
 		return nil, errors.New("unknown provider")
 	}
