@@ -28,6 +28,9 @@ type Server struct {
 	lim      map[string]*rate.Limiter
 	limSeen  map[string]time.Time
 	limSweep time.Time
+
+	ropeMu sync.Mutex
+	rope   map[string]*shadowRopeState
 }
 
 type ceremonyFlow struct {
@@ -72,6 +75,7 @@ func NewServer(cfg Config) (*Server, error) {
 		webauthnFlow: map[string]ceremonyFlow{},
 		lim:          map[string]*rate.Limiter{},
 		limSeen:      map[string]time.Time{},
+		rope:         map[string]*shadowRopeState{},
 	}
 
 	if cfg.DevNoAuth {

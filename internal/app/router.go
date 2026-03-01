@@ -123,6 +123,8 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleUniversalInput(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/agent/tool-calls":
 		s.handleAgentToolCalls(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/agent/rope":
+		s.handleShadowRope(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/invites":
 		s.handleCreateInvite(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/members":
