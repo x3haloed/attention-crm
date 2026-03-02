@@ -2,14 +2,18 @@ package app
 
 import (
 	"attention-crm/internal/control"
+	"attention-crm/internal/tenantdb"
 	"encoding/json"
 	"net/http"
 )
 
-func (s *Server) handleShadowRope(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
+func (s *Server) handleBackfillLedger(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
 	sess, ok := s.readSession(r)
 	if !ok || sess.TenantSlug != tenant.Slug {
 		http.Redirect(w, r, "/t/"+tenant.Slug+"/login", http.StatusSeeOther)
+		return
+	}
+	if !s.requireCSRF(w, r) {
 		return
 	}
 
@@ -20,18 +24,15 @@ func (s *Server) handleShadowRope(w http.ResponseWriter, r *http.Request, tenant
 	}
 	defer db.Close()
 
-	marker, items, _, err := s.shadowRopeSnapshot(db, tenant, sess, r)
+	res, err := tenantdb.BackfillLedgerFromCurrentTables(db, sess.UserID)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-	if items == nil {
-		items = []shadowRopeItem{}
-	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"marker": marker,
-		"items":  items,
+		"ok":      true,
+		"result":  res,
 	})
 }
+

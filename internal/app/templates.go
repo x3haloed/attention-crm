@@ -133,6 +133,7 @@ const tenantBaseTemplate = `{{define "page"}}<!doctype html>
   <script defer src="/static/contact_detail.js?v=1"></script>
   <script defer src="/static/agent_rail.js?v=1"></script>
   <script defer src="/static/infer_config.js?v=1"></script>
+  <script defer src="/static/shadow_test.js?v=1"></script>
 </head>
 <body class="bg-gray-50 font-sans" data-tenant-slug="{{.TenantSlug}}">
   {{template "body" .}}

@@ -129,6 +129,12 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleAgentToolCalls(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/agent/rope":
 		s.handleShadowRope(w, r, tenant)
+	case r.Method == http.MethodGet && rest == "/agent/shadow":
+		s.handleShadowTestPage(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/agent/shadow/run":
+		s.handleShadowRunNow(w, r, tenant)
+	case r.Method == http.MethodPost && rest == "/agent/ledger/backfill":
+		s.handleBackfillLedger(w, r, tenant)
 	case r.Method == http.MethodGet && rest == "/agent/infer/config":
 		s.handleInferConfigGet(w, r, tenant)
 	case r.Method == http.MethodPost && rest == "/agent/infer/config":

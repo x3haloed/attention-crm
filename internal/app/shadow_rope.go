@@ -92,8 +92,8 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 		items = append(items, it)
 		lastSeen = ev.ID
 
-		// Avoid self-trigger loops: agent spine events produced by ui.message should not retrigger shadow mode.
-		if !(strings.EqualFold(ev.ActorKind, tenantdb.ActorKindAgent) && strings.EqualFold(strings.TrimSpace(ev.Op), "agent.spine.event")) {
+		// Shadow triggers only on the paired human's ledger activity; agent/system entries are context only.
+		if strings.EqualFold(ev.ActorKind, tenantdb.ActorKindHuman) && ev.ActorUserID.Valid && ev.ActorUserID.Int64 == sess.UserID {
 			triggerAdded++
 		}
 	}
@@ -125,7 +125,19 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 	if state.Marker != nil {
 		marker = *state.Marker
 	}
-	outItems := append([]shadowRopeItem(nil), state.Items...)
+	// Re-narrate from source-of-truth events so rope wording can evolve without needing a server restart.
+	outItems := make([]shadowRopeItem, 0, len(state.Items))
+	for _, it := range state.Items {
+		if it.LedgerEventID > 0 && db != nil {
+			if ev, err := db.LedgerEventByID(it.LedgerEventID); err == nil && ev != nil {
+				if rit, ok := narrateLedgerEvent(db, *ev); ok {
+					outItems = append(outItems, rit)
+					continue
+				}
+			}
+		}
+		outItems = append(outItems, it)
+	}
 	return marker, outItems, triggerAdded, nil
 }
 
@@ -171,10 +183,17 @@ func narrateLedgerEvent(db *tenantdb.Store, ev tenantdb.LedgerEvent) (shadowRope
 	}
 
 	actorPrefix := "System"
-	if strings.EqualFold(ev.ActorKind, tenantdb.ActorKindHuman) {
+	switch {
+	case strings.EqualFold(ev.ActorKind, tenantdb.ActorKindHuman):
+		actorPrefix = "User"
+		if db != nil && ev.ActorUserID.Valid && ev.ActorUserID.Int64 > 0 {
+			if u, err := db.WebAuthnUserByID(ev.ActorUserID.Int64); err == nil {
+				actorPrefix = firstNameOrFallback(u.Name, "User")
+			}
+		}
+	case strings.EqualFold(ev.ActorKind, tenantdb.ActorKindAgent):
+		// From the model's perspective, agent-authored events are "You".
 		actorPrefix = "You"
-	} else if strings.EqualFold(ev.ActorKind, tenantdb.ActorKindAgent) {
-		actorPrefix = "Agent"
 	}
 
 	narration := ""

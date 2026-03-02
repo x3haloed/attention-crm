@@ -1,7 +1,6 @@
 package app
 
 import (
-	"attention-crm/internal/agent"
 	"attention-crm/internal/control"
 	"attention-crm/internal/inference"
 	"context"
@@ -41,160 +40,9 @@ func (s *Server) kickShadowRunAsync(tenant control.Tenant, sess session, r *http
 }
 
 func (s *Server) shadowRunOnce(tenant control.Tenant, sess session, r *http.Request) error {
-	db, err := s.openTenantDB(tenant.DBPath)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	cfg, err := s.control.TenantInferenceConfig(tenant.Slug)
-	if err != nil {
-		return err
-	}
-	if cfg == nil {
-		return nil
-	}
-
-	marker, items, triggerAdded, err := s.shadowRopeSnapshot(db, tenant, sess, r)
-	if err != nil {
-		return err
-	}
-	if triggerAdded == 0 {
-		return nil
-	}
-
-	agentKey := shadowSessionKey(r, sess, tenant)
-
-	userName := ""
-	if u, err := db.WebAuthnUserByID(sess.UserID); err == nil {
-		userName = strings.TrimSpace(u.Name)
-	}
-	userFirstName := firstNameOrFallback(userName, "User")
-
-	cilHead, _ := db.CompileCILHead(agentKey, 30)
-
-	headers := map[string]string{}
-	if strings.TrimSpace(cfg.HeadersJSON) != "" {
-		_ = json.Unmarshal([]byte(cfg.HeadersJSON), &headers)
-	}
-	client, err := inference.New(inference.Config{
-		Provider: inference.ProviderKind(cfg.Provider),
-		BaseURL:  cfg.BaseURL,
-		Model:    cfg.Model,
-		APIKey:   cfg.APIKey,
-		Headers:  headers,
-		Timeout:  90 * time.Second,
-	})
-	if err != nil {
-		return err
-	}
-
-	company := strings.TrimSpace(tenant.Name)
-	if company == "" {
-		company = tenant.Slug
-	}
-
-	dev := strings.TrimSpace(`
-You are learning to become a fully autonomous agent for ` + company + ` inside the Attention CRM product.
-You are shadowing your human, ` + userFirstName + `.
-
-Your job: observe incoming ledger events, infer intent, and fill in missing context by asking clarifying questions and recording durable learning.
-
-You have two private memory outlets:
-- CIL invariants via cil.append_inv (high value learning; strict schema; compiled head is injected into each prompt).
-- Plain self-notes via notes.append / notes.search (fact recall; NOT the same as learning).
-
-Heuristics:
-- Ask a question when: an intent is unclear; a decision has consequences; a follow-up is implied but not specified; information looks inconsistent; an external effect occurred (e.g. an email was sent) and you need to confirm intent.
-- Do ui.no_action when: the event is self-explanatory and you have no clarifying questions.
-- Record a CIL invariant when: you observe a generalizable causal constraint that should change future autonomous behavior.
-  - Required fields: id, name, trigger, because, if_not, scope, rev, src (plus optional: seen, last, ex).
-  - Avoid "instruction smell": remove should/must; if it collapses, rewrite as because+if_not.
-  - If you can't state a concrete if_not consequence, do NOT write an invariant; consider a plain self-note instead.
-  - Do NOT write an invariant when: the event was routine; you're writing a reminder/checklist; the lesson won't recur; you can't state if_not concretely.
-  - Smell tests:
-    1) Remove "should" — if it collapses, it was an instruction.
-    2) Argue with it — strengthen ex or if_not if it's easy to dispute.
-    3) "Says who?" — if the answer isn't "this happened", rewrite with evidence/signature.
-
-Output rules:
-- You may call multiple tools, but you MUST end with a terminal UI tool:
-  - Terminal: ui.message OR ui.no_action
-  - Non-terminal: cil.append_inv, notes.append, notes.search
-- Do not output plain text.
-- If you call ui.message: ask a single clarifying question in 1–2 short sentences; use human language; do not mention internal event types or ids.
-`)
-
-	user := buildShadowRopePrompt(tenant, userFirstName, cilHead, marker, items)
-
-	tools := []inference.ToolDef{
-		makeUINoActionTool(),
-		makeUIMessageTool(),
-		makeCILAppendINVTool(),
-		makeNotesAppendTool(),
-		makeNotesSearchTool(),
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
-
-	messages := []inference.Message{
-		{Role: "developer", Content: dev},
-		{Role: "user", Content: user},
-	}
-
-	const maxSteps = 6
-	for step := 0; step < maxSteps; step++ {
-		res, err := client.Stream(ctx, inference.Request{
-			Messages: messages,
-			Tools:    tools,
-			// Shadow mode is tool-call-only; force a tool call if provider supports it.
-			RequireToolCall:          true,
-			DisableParallelToolCalls: true,
-		}, func(ev inference.StreamEvent) error {
-			// For now, ignore streaming events. We'll surface them later in the rail if desired.
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		var call agent.FunctionCall
-		found := false
-		for _, raw := range res.FunctionCalls {
-			if err := json.Unmarshal(raw, &call); err == nil {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-		if strings.TrimSpace(call.CallID) == "" {
-			call.CallID = "call_shadow_" + strconv.Itoa(step)
-		}
-
-		execRes, err := executeShadowToolCall(db, agentKey, sess.UserID, call)
-		if err != nil {
-			return err
-		}
-		if execRes.Terminal {
-			return nil
-		}
-
-		// Feed tool calls + outputs back to the model (chat-completions compatible).
-		argsJSON, _ := call.NormalizedArguments()
-		toolCall := inference.ToolCall{ID: call.CallID, Type: "function"}
-		toolCall.Function.Name = call.Name
-		toolCall.Function.Arguments = string(argsJSON)
-		messages = append(messages,
-			inference.Message{Role: "assistant", ToolCalls: []inference.ToolCall{toolCall}},
-			inference.Message{Role: "tool", ToolCallID: call.CallID, Content: execRes.Output},
-		)
-	}
-
-	// Max steps reached without a terminal tool.
-	return nil
+	return s.shadowRunLoop(ctx, tenant, sess, r, false, nil)
 }
 
 func buildShadowRopePrompt(tenant control.Tenant, userFirstName string, cilHead string, marker shadowRopeMarker, items []shadowRopeItem) string {
