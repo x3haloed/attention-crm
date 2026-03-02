@@ -63,7 +63,11 @@ func (s *Server) handleTenantRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sess, ok := s.readSession(r); ok && sess.TenantSlug == tenant.Slug {
-		defer s.kickShadowRunAsync(tenant, sess, r)
+		// Kick shadow mode only after write-ish requests; it reads the ledger and will no-op if nothing changed.
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			defer s.kickShadowRunAsync(tenant, sess, r)
+		}
 	}
 
 	switch {

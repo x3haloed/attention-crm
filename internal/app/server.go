@@ -34,6 +34,7 @@ type Server struct {
 
 	shadowMu      sync.Mutex
 	shadowRunning map[string]bool
+	shadowPending map[string]bool
 }
 
 type ceremonyFlow struct {
@@ -80,6 +81,7 @@ func NewServer(cfg Config) (*Server, error) {
 		limSeen:      map[string]time.Time{},
 		rope:         map[string]*shadowRopeState{},
 		shadowRunning: map[string]bool{},
+		shadowPending: map[string]bool{},
 	}
 
 	if cfg.DevNoAuth {

@@ -23,6 +23,7 @@ func (s *Server) kickShadowRunAsync(tenant control.Tenant, sess session, r *http
 	key := shadowSessionKey(r, sess, tenant)
 	s.shadowMu.Lock()
 	if s.shadowRunning[key] {
+		s.shadowPending[key] = true
 		s.shadowMu.Unlock()
 		return
 	}
@@ -32,15 +33,30 @@ func (s *Server) kickShadowRunAsync(tenant control.Tenant, sess session, r *http
 	go func() {
 		defer func() {
 			s.shadowMu.Lock()
+			delete(s.shadowPending, key)
 			delete(s.shadowRunning, key)
 			s.shadowMu.Unlock()
 		}()
-		_ = s.shadowRunOnce(tenant, sess, r)
+
+		// Coalesce bursts: if more requests arrive while a run is in-flight, run again after completion.
+		for i := 0; i < 5; i++ {
+			_ = s.shadowRunOnce(tenant, sess, r)
+
+			s.shadowMu.Lock()
+			pending := s.shadowPending[key]
+			s.shadowPending[key] = false
+			s.shadowMu.Unlock()
+
+			if !pending {
+				return
+			}
+		}
 	}()
 }
 
 func (s *Server) shadowRunOnce(tenant control.Tenant, sess session, r *http.Request) error {
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	// This runs in a goroutine after the request returns; do NOT use r.Context() (it cancels immediately).
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	return s.shadowRunLoop(ctx, tenant, sess, r, false, nil)
 }
