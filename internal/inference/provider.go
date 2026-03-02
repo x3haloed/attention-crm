@@ -12,9 +12,9 @@ import (
 type ProviderKind string
 
 const (
-	ProviderOpenAI    ProviderKind = "openai"
+	ProviderOpenAI     ProviderKind = "openai"
 	ProviderOpenRouter ProviderKind = "openrouter"
-	ProviderLMStudio  ProviderKind = "lmstudio"
+	ProviderLMStudio   ProviderKind = "lmstudio"
 )
 
 type Config struct {
@@ -29,10 +29,16 @@ type Config struct {
 type Request struct {
 	Messages []Message `json:"messages"`
 	Tools    []ToolDef `json:"tools,omitempty"`
+	// RequireToolCall forces the model to call at least one tool when supported
+	// by the provider's API (chat-completions: tool_choice="required").
+	RequireToolCall bool `json:"-"`
+	// DisableParallelToolCalls requests exactly zero or one tool call per turn
+	// when supported by the provider's API (chat-completions: parallel_tool_calls=false).
+	DisableParallelToolCalls bool `json:"-"`
 }
 
 type Result struct {
-	OutputText   string            `json:"output_text"`
+	OutputText    string            `json:"output_text"`
 	FunctionCalls []json.RawMessage `json:"function_calls,omitempty"`
 }
 

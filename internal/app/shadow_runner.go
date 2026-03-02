@@ -101,6 +101,9 @@ If you do message the user, call ui.message with a short, helpful note or questi
 			{Role: "user", Content: user},
 		},
 		Tools: tools,
+		// Shadow mode is tool-call-only; force a tool call if provider supports it.
+		RequireToolCall:          true,
+		DisableParallelToolCalls: true,
 	}, func(ev inference.StreamEvent) error {
 		// For now, ignore streaming events. We'll surface them later in the rail if desired.
 		return nil

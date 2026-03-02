@@ -31,6 +31,10 @@ type openAIChatReq struct {
 	Stream   bool      `json:"stream"`
 	// Tools are supported by OpenAI chat-completions, but shapes vary between providers.
 	Tools []ToolDef `json:"tools,omitempty"`
+	// tool_choice: "auto" (default) or "required".
+	ToolChoice any `json:"tool_choice,omitempty"`
+	// parallel_tool_calls defaults true on some providers; set false to forbid.
+	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
 }
 
 type chatChunk struct {
@@ -71,6 +75,13 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 	}
 	if len(req.Tools) > 0 {
 		payload.Tools = req.Tools
+	}
+	if req.RequireToolCall {
+		payload.ToolChoice = "required"
+	}
+	if req.DisableParallelToolCalls {
+		f := false
+		payload.ParallelToolCalls = &f
 	}
 
 	b, _ := json.Marshal(payload)
@@ -167,7 +178,7 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 	_ = onEvent(StreamEvent{Type: "response.completed"})
 
 	return Result{
-		OutputText:   outText.String(),
+		OutputText:    outText.String(),
 		FunctionCalls: functionCalls,
 	}, nil
 }
