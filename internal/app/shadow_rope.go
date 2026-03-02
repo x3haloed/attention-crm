@@ -23,6 +23,7 @@ type shadowRopeItem struct {
 	Op            string `json:"-"`
 
 	Narration string `json:"narration"`
+	Detail    string `json:"detail,omitempty"`
 }
 
 type shadowRopeMarker struct {
@@ -84,7 +85,7 @@ func (s *Server) shadowRopeSnapshot(db *tenantdb.Store, tenant control.Tenant, s
 				continue
 			}
 		}
-		it, ok := narrateLedgerEvent(ev)
+		it, ok := narrateLedgerEvent(db, ev)
 		if !ok {
 			continue
 		}
@@ -154,7 +155,7 @@ type ropeEmailCommittedPayload struct {
 	Body             []string `json:"body"`
 }
 
-func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
+func narrateLedgerEvent(db *tenantdb.Store, ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 	op := strings.TrimSpace(ev.Op)
 	entityType := strings.TrimSpace(ev.EntityType)
 
@@ -177,6 +178,7 @@ func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 	}
 
 	narration := ""
+	detail := ""
 	switch op {
 	case "contact.created":
 		var p ropeContactCreatedPayload
@@ -197,7 +199,18 @@ func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 		if field == "" {
 			field = "a field"
 		}
-		narration = actorPrefix + " updated " + field + " on a contact"
+		contactName := "a contact"
+		if db != nil && ev.EntityID.Valid && ev.EntityID.Int64 > 0 {
+			if c, err := db.ContactByID(ev.EntityID.Int64); err == nil {
+				if name := strings.TrimSpace(c.Name); name != "" {
+					contactName = name
+				}
+			}
+		}
+		narration = actorPrefix + " updated " + field + " on " + contactName
+		if v := strings.TrimSpace(p.Value); v != "" {
+			detail = field + ": " + v
+		}
 
 	case "interaction.created":
 		var p ropeInteractionCreatedPayload
@@ -206,7 +219,34 @@ func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 		if kind == "" {
 			kind = "interaction"
 		}
-		narration = actorPrefix + " logged a " + kind
+		contactName := "a contact"
+		if db != nil && p.ContactID > 0 {
+			if c, err := db.ContactByID(p.ContactID); err == nil {
+				if name := strings.TrimSpace(c.Name); name != "" {
+					contactName = name
+				}
+			}
+		}
+		content := strings.TrimSpace(p.Content)
+		excerpt := content
+		const maxExcerpt = 96
+		if len([]rune(excerpt)) > maxExcerpt {
+			excerpt = string([]rune(excerpt)[:maxExcerpt]) + "…"
+		}
+		if excerpt != "" {
+			narration = actorPrefix + " logged a " + kind + " with " + contactName + ": “" + excerpt + "”"
+		} else {
+			narration = actorPrefix + " logged a " + kind + " with " + contactName
+		}
+		if content != "" {
+			detail = content
+		}
+		if due := strings.TrimSpace(p.DueAt); due != "" {
+			if detail != "" {
+				detail = detail + "\n"
+			}
+			detail = detail + "Follow-up due: " + due
+		}
 
 	case "interaction.completed":
 		narration = actorPrefix + " completed a follow-up"
@@ -218,6 +258,15 @@ func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 			narration = actorPrefix + " sent an email to " + strings.TrimSpace(p.To)
 		} else {
 			narration = actorPrefix + " sent an email"
+		}
+		if subj := strings.TrimSpace(p.Subject); subj != "" {
+			detail = "Subject: " + subj
+		}
+		if len(p.Body) > 0 {
+			if detail != "" {
+				detail = detail + "\n"
+			}
+			detail = detail + strings.Join(p.Body, "\n")
 		}
 
 	default:
@@ -244,5 +293,6 @@ func narrateLedgerEvent(ev tenantdb.LedgerEvent) (shadowRopeItem, bool) {
 		EntityID:      entityID,
 		Op:            op,
 		Narration:     narration,
+		Detail:        detail,
 	}, true
 }

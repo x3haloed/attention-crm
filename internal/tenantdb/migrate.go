@@ -253,6 +253,72 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_workspace_created
 CREATE INDEX IF NOT EXISTS idx_activity_events_workspace_actor_status
   ON activity_events(workspace_id, actor_kind, status, created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS cil_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  agent_key TEXT NOT NULL,
+
+  kind TEXT NOT NULL CHECK(kind IN ('chain','inv')),
+  rev TEXT NOT NULL DEFAULT 'active',
+  content TEXT NOT NULL DEFAULT '',
+
+  source_event_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(source_event_id) REFERENCES ledger_events(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cil_entries_workspace_agent_created
+  ON cil_entries(workspace_id, agent_key, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_cil_entries_workspace_agent_kind
+  ON cil_entries(workspace_id, agent_key, kind, rev, id DESC);
+
+CREATE TABLE IF NOT EXISTS cil_invariants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  agent_key TEXT NOT NULL,
+
+  inv_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  because TEXT NOT NULL,
+  if_not TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  seen INTEGER,
+  last TEXT,
+  ex TEXT,
+  rev TEXT NOT NULL DEFAULT 'active',
+  src TEXT NOT NULL,
+
+  source_event_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(source_event_id) REFERENCES ledger_events(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cil_invariants_workspace_agent_created
+  ON cil_invariants(workspace_id, agent_key, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_cil_invariants_workspace_agent_invid
+  ON cil_invariants(workspace_id, agent_key, inv_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS agent_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  agent_key TEXT NOT NULL,
+
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_notes_workspace_agent_created
+  ON agent_notes(workspace_id, agent_key, created_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS deal_contacts (
   deal_id INTEGER NOT NULL,
   contact_id INTEGER NOT NULL,

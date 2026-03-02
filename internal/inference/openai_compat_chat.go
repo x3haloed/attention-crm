@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -116,6 +117,7 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 	var outText strings.Builder
 	toolArgsByIndex := map[int]string{}
 	toolNameByIndex := map[int]string{}
+	toolIDByIndex := map[int]string{}
 
 	err = ReadSSE(resp.Body, func(ev SSEEvent) error {
 		data := bytes.TrimSpace(ev.Data)
@@ -143,6 +145,9 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 			_ = onEvent(StreamEvent{Type: "response.output_text.delta", Data: mustJSON(map[string]any{"delta": d.Content})})
 		}
 		for _, tc := range d.ToolCalls {
+			if strings.TrimSpace(tc.ID) != "" {
+				toolIDByIndex[tc.Index] = strings.TrimSpace(tc.ID)
+			}
 			if strings.TrimSpace(tc.Function.Name) != "" {
 				toolNameByIndex[tc.Index] = strings.TrimSpace(tc.Function.Name)
 			}
@@ -169,10 +174,15 @@ func (c *openAICompatChat) Stream(ctx context.Context, req Request, onEvent Stre
 		if name == "" {
 			continue
 		}
+		callID := strings.TrimSpace(toolIDByIndex[idx])
+		if callID == "" {
+			callID = "call_" + strconv.Itoa(idx)
+		}
 		functionCalls = append(functionCalls, mustJSON(map[string]any{
 			"type":      "function_call",
 			"name":      name,
 			"arguments": args,
+			"call_id":   callID,
 		}))
 	}
 	_ = onEvent(StreamEvent{Type: "response.completed"})
@@ -195,12 +205,13 @@ func normalizeChatMessages(in []Message) []Message {
 		if role == "" {
 			role = "user"
 		}
-		// Chat-completions APIs generally support: system, user, assistant.
+		// Chat-completions APIs generally support: system, user, assistant, tool.
 		// We treat developer as system for compatibility.
 		if role == "developer" {
 			role = "system"
 		}
-		out = append(out, Message{Role: role, Content: m.Content})
+		m.Role = role
+		out = append(out, m)
 	}
 	return out
 }
