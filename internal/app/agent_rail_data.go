@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func loadAgentRail(db *tenantdb.Store) (template.HTML, error) {
+func loadAgentRail(db *tenantdb.Store, marker *shadowRopeMarker) (template.HTML, error) {
 	ledger, err := db.ListLedgerEventsFiltered(tenantdb.LedgerEventFilter{
 		Limit: 60,
 	})
@@ -17,7 +17,7 @@ func loadAgentRail(db *tenantdb.Store) (template.HTML, error) {
 	}
 
 	past, current := buildRailSpineEvents(ledger, 10)
-	return renderAgentRail(time.Now(), past, current), nil
+	return renderAgentRail(time.Now(), marker, past, current), nil
 }
 
 func buildRailSpineEvents(events []tenantdb.LedgerEvent, maxPast int) ([]spineEvent, *spineEvent) {

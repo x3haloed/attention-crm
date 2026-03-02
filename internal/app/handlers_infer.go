@@ -13,11 +13,11 @@ import (
 )
 
 type inferConfigDTO struct {
-	Provider   string            `json:"provider"`
-	BaseURL    string            `json:"base_url"`
-	Model      string            `json:"model"`
-	APIKey     string            `json:"api_key,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
+	Provider string            `json:"provider"`
+	BaseURL  string            `json:"base_url"`
+	Model    string            `json:"model"`
+	APIKey   string            `json:"api_key,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
 }
 
 func (s *Server) handleInferConfigGet(w http.ResponseWriter, r *http.Request, tenant control.Tenant) {
@@ -66,6 +66,14 @@ func (s *Server) handleInferConfigPost(w http.ResponseWriter, r *http.Request, t
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+
+	// If api_key is omitted/blank, preserve the existing key (if any).
+	if strings.TrimSpace(dto.APIKey) == "" {
+		if existing, err := s.control.TenantInferenceConfig(tenant.Slug); err == nil && existing != nil {
+			dto.APIKey = existing.APIKey
+		}
+	}
+
 	headersJSON := ""
 	if len(dto.Headers) > 0 {
 		if b, err := json.Marshal(dto.Headers); err == nil {
@@ -169,4 +177,3 @@ func (s *Server) handleInferStream(w http.ResponseWriter, r *http.Request, tenan
 		return nil
 	})
 }
-

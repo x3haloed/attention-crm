@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"html/template"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -13,7 +14,7 @@ type emailDraftDetail struct {
 	Body    []string `json:"body"`
 }
 
-func renderAgentRail(now time.Time, past []spineEvent, current *spineEvent) template.HTML {
+func renderAgentRail(now time.Time, marker *shadowRopeMarker, past []spineEvent, current *spineEvent) template.HTML {
 	var b strings.Builder
 
 	b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">`)
@@ -28,7 +29,7 @@ func renderAgentRail(now time.Time, past []spineEvent, current *spineEvent) temp
 	b.WriteString(`</div>`)
 
 	b.WriteString(`<div class="p-6 flex-1 min-h-0 bg-gray-50 overflow-auto">`)
-	b.WriteString(renderAgentActionSpine(now, past, current))
+	b.WriteString(renderAgentActionSpine(now, marker, past, current))
 	b.WriteString(`</div>`)
 
 	b.WriteString(`<div class="mt-auto p-4 border-t border-gray-200 bg-white">`)
@@ -59,12 +60,22 @@ func renderAgentRail(now time.Time, past []spineEvent, current *spineEvent) temp
 	return template.HTML(b.String())
 }
 
-func renderAgentActionSpine(now time.Time, past []spineEvent, current *spineEvent) string {
+func renderAgentActionSpine(now time.Time, marker *shadowRopeMarker, past []spineEvent, current *spineEvent) string {
 	var b strings.Builder
 
 	// Use a consistent "spine" layout regardless of whether there's an active event.
 	b.WriteString(`<div id="email-drafting-area" class="flex-1 bg-gray-50 overflow-y-auto py-2">`)
 	b.WriteString(`<div class="max-w-2xl mx-auto">`)
+
+	if marker != nil && marker.BeforeLedgerEventID != 0 && strings.TrimSpace(marker.BeforeCreatedAt) != "" {
+		b.WriteString(`<div class="mb-4 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2 text-xs text-gray-600">`)
+		b.WriteString(`<span class="font-medium text-gray-800">Agent context starts here</span>`)
+		b.WriteString(`<span class="ml-2 text-gray-500" title="This is as far back as the agent remembers automatically. Ask the agent to search history to recall earlier events.">`)
+		b.WriteString(`(why?)</span>`)
+		b.WriteString(`<div class="mt-1 text-[11px] text-gray-500">Truncated before ledger_event_id ` + template.HTMLEscapeString(strconv.FormatInt(marker.BeforeLedgerEventID, 10)) + ` at ` + template.HTMLEscapeString(strings.TrimSpace(marker.BeforeCreatedAt)) + `.</div>`)
+		b.WriteString(`</div>`)
+	}
+
 	b.WriteString(`<div id="action-spine" class="mb-6 sm:mb-8">`)
 	b.WriteString(`<div class="relative">`)
 	b.WriteString(`<div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-400 to-purple-400"></div>`)

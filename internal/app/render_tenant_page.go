@@ -15,7 +15,17 @@ func (s *Server) renderTenantAppPage(w http.ResponseWriter, r *http.Request, ten
 		pd.OmniBar = renderOmniBar(tenant, "", "header")
 	}
 	if strings.TrimSpace(string(pd.Rail)) == "" && db != nil {
-		rail, err := loadAgentRail(db)
+		var markerPtr *shadowRopeMarker
+		if sess, ok := s.readSession(r); ok && sess.TenantSlug == tenant.Slug {
+			if marker, _, _, err := s.shadowRopeSnapshot(db, tenant, sess, r); err == nil {
+				if marker.BeforeLedgerEventID != 0 {
+					tmp := marker
+					markerPtr = &tmp
+				}
+			}
+		}
+
+		rail, err := loadAgentRail(db, markerPtr)
 		if err != nil {
 			s.internalError(w, r, err)
 			return
