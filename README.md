@@ -1,6 +1,7 @@
 # attention-crm
 
-Early scaffold for the meaning-first CRM MVP.
+<img width="1297" height="903" alt="image" src="https://github.com/user-attachments/assets/6fb1cdf7-fa5a-48b3-8388-1318a245af68" />
+
 
 ## Current implementation
 
