@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS workspaces (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
@@ -379,6 +384,8 @@ CREATE TABLE IF NOT EXISTS passkey_credentials (
 
 CREATE INDEX IF NOT EXISTS idx_passkey_credentials_user
   ON passkey_credentials(user_id);
+
+INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
 `)
 	if err != nil {
 		return fmt.Errorf("migrate tenant: %w", err)

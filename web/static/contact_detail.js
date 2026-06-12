@@ -45,17 +45,35 @@
     const updateURL = `/t/${tenantSlug}/contacts/${contactID}/update`;
 
     const timers = new Map();
+
+    function savedValueFor(el) {
+      return el.dataset.attentionSavedValue || el.defaultValue || el.value || "";
+    }
+
+    function markSavedValue(el, value) {
+      el.dataset.attentionSavedValue = value;
+      el.dataset.attentionOriginalValue = value;
+    }
+
     function scheduleSave(el) {
       const field = el.getAttribute("data-field") || "";
       if (!field) return;
       const value = el.value || "";
+      if (value === savedValueFor(el)) {
+        setSaveIndicator(saveIndicator, "saved");
+        return;
+      }
       setSaveIndicator(saveIndicator, "saving");
       if (timers.has(field)) window.clearTimeout(timers.get(field));
-      const t = window.setTimeout(() => doSave(field, value), 450);
+      const t = window.setTimeout(() => doSave(el, field, value), 450);
       timers.set(field, t);
     }
 
-    function doSave(field, value) {
+    function doSave(el, field, value) {
+      if (value === savedValueFor(el)) {
+        setSaveIndicator(saveIndicator, "saved");
+        return Promise.resolve();
+      }
       return fetch(updateURL, {
         method: "POST",
         headers: {
@@ -69,6 +87,7 @@
           return res.json();
         })
         .then(() => {
+          markSavedValue(el, value);
           setSaveIndicator(saveIndicator, "saved");
         })
         .catch(() => {
@@ -80,14 +99,32 @@
     fields.forEach((el) => {
       if (el.dataset.attentionBound === "1") return;
       el.dataset.attentionBound = "1";
+      markSavedValue(el, el.value || "");
       el.addEventListener("input", () => scheduleSave(el));
+      el.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          el.blur();
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          const field = el.getAttribute("data-field") || "";
+          if (field && timers.has(field)) {
+            window.clearTimeout(timers.get(field));
+            timers.delete(field);
+          }
+          el.value = savedValueFor(el);
+          setSaveIndicator(saveIndicator, "saved");
+        }
+      });
       el.addEventListener("blur", () => {
         const field = el.getAttribute("data-field") || "";
         if (field && timers.has(field)) {
           window.clearTimeout(timers.get(field));
           timers.delete(field);
         }
-        doSave(field, el.value || "");
+        doSave(el, field, el.value || "");
       });
     });
 
@@ -121,4 +158,3 @@
   window.addEventListener("DOMContentLoaded", initContactDetail);
   window.addEventListener("attention:desk:swap", initContactDetail);
 })();
-

@@ -52,6 +52,103 @@ func renderTenantAppBody(
 	b.WriteString(quickCaptureButton("New Deal", "Track opportunity", "hover:border-purple-300 hover:bg-purple-50", "bg-purple-100", "group-hover:bg-purple-200", "text-purple-600", "M20 6h-3.586l-1.707-1.707A1 1 0 0 0 14 4H10a1 1 0 0 0-.707.293L7.586 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Zm0 12H4V8h4l2-2h4l2 2h4v10Z", "deal"))
 	b.WriteString(`</div></div>`)
 
+	if len(state.SearchResults) > 0 || state.SuggestNote != nil {
+		b.WriteString(`<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">`)
+		b.WriteString(`<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4">`)
+		b.WriteString(`<div><h2 class="text-lg font-semibold text-gray-900">Universal input results</h2><p class="text-sm text-gray-600">Search matches and suggested actions from the last entry.</p></div>`)
+		if strings.TrimSpace(state.UniversalText) != "" {
+			b.WriteString(`<div class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 max-w-full truncate">` + template.HTMLEscapeString(state.UniversalText) + `</div>`)
+		}
+		b.WriteString(`</div>`)
+
+		if len(state.SearchResults) > 0 {
+			b.WriteString(`<div class="space-y-2">`)
+			for _, c := range state.SearchResults {
+				label := strings.TrimSpace(c.Name)
+				if label == "" {
+					label = strings.TrimSpace(c.Email)
+				}
+				if label == "" {
+					label = strings.TrimSpace(c.Phone)
+				}
+				if label == "" {
+					label = "Unnamed contact"
+				}
+				sub := strings.TrimSpace(c.Email)
+				if sub == "" {
+					sub = strings.TrimSpace(c.Phone)
+				}
+				if sub == "" {
+					sub = strings.TrimSpace(c.Company)
+				}
+				b.WriteString(`<a class="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(c.ID, 10) + `">`)
+				b.WriteString(`<div class="min-w-0">`)
+				b.WriteString(`<div class="text-sm font-medium text-gray-900 truncate">` + template.HTMLEscapeString(label) + `</div>`)
+				if sub != "" {
+					b.WriteString(`<div class="mt-1 text-xs text-gray-600 truncate">` + template.HTMLEscapeString(sub) + `</div>`)
+				}
+				b.WriteString(`</div>`)
+				b.WriteString(`<div class="text-xs font-medium text-blue-600 shrink-0">Open</div>`)
+				b.WriteString(`</a>`)
+			}
+			b.WriteString(`</div>`)
+		}
+
+		if state.SuggestNote != nil {
+			b.WriteString(`<div class="mt-6 pt-6 border-t border-gray-100">`)
+			b.WriteString(`<div class="flex items-center justify-between gap-3 mb-3">`)
+			b.WriteString(`<div><div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Suggested note</div><div class="text-sm text-gray-700">Attach this note to a contact.</div></div>`)
+			if state.SuggestNote.DueAtLocal != "" {
+				b.WriteString(`<div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5">Due ` + template.HTMLEscapeString(state.SuggestNote.DueAtLocal) + `</div>`)
+			}
+			b.WriteString(`</div>`)
+			b.WriteString(`<div class="rounded-xl border border-blue-200 bg-blue-50 p-4">`)
+			b.WriteString(`<p class="text-sm text-blue-900">` + template.HTMLEscapeString(snippet(state.SuggestNote.Content, 220)) + `</p>`)
+			if len(state.SuggestNote.ContactHints) > 0 {
+				b.WriteString(`<div class="mt-4 space-y-2">`)
+				for i, hint := range state.SuggestNote.ContactHints {
+					if i >= 3 {
+						break
+					}
+					name := strings.TrimSpace(hint.Name)
+					if name == "" {
+						name = strings.TrimSpace(hint.Email)
+					}
+					if name == "" {
+						name = strings.TrimSpace(hint.Phone)
+					}
+					if name == "" {
+						name = "Unnamed contact"
+					}
+					b.WriteString(`<form method="POST" action="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(hint.ID, 10) + `/interactions" class="flex flex-col gap-3 rounded-lg border border-blue-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">`)
+					b.WriteString(`<input type="hidden" name="type" value="note">`)
+					b.WriteString(`<input type="hidden" name="content" value="` + template.HTMLEscapeString(state.SuggestNote.Content) + `">`)
+					if state.SuggestNote.DueAtLocal != "" {
+						b.WriteString(`<input type="hidden" name="due_at" value="` + template.HTMLEscapeString(state.SuggestNote.DueAtLocal) + `">`)
+					}
+					b.WriteString(`<div class="min-w-0">`)
+					b.WriteString(`<div class="text-sm font-medium text-gray-900 truncate">` + template.HTMLEscapeString(name) + `</div>`)
+					if strings.TrimSpace(hint.Company) != "" {
+						b.WriteString(`<div class="mt-1 text-xs text-gray-600 truncate">` + template.HTMLEscapeString(strings.TrimSpace(hint.Company)) + `</div>`)
+					}
+					b.WriteString(`</div>`)
+					b.WriteString(`<div class="flex items-center gap-2 self-end sm:self-auto">`)
+					b.WriteString(`<a class="text-xs font-medium text-gray-600 hover:text-gray-800 hover:underline" href="/t/` + tenantSlugEsc + `/contacts/` + strconv.FormatInt(hint.ID, 10) + `">Open</a>`)
+					b.WriteString(`<button type="submit" class="h-9 px-4 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700">Log note</button>`)
+					b.WriteString(`</div>`)
+					b.WriteString(`</form>`)
+				}
+				b.WriteString(`</div>`)
+			} else {
+				b.WriteString(`<div class="mt-4 text-sm text-gray-700">No contact hint was found. Use the omnibar to pick a contact, then log the note.</div>`)
+			}
+			b.WriteString(`</div>`)
+			b.WriteString(`</div>`)
+		}
+
+		b.WriteString(`</div>`)
+	}
+
 	b.WriteString(`<div class="grid grid-cols-12 gap-6 mt-6" id="content-grid">`)
 
 	// Needs Attention

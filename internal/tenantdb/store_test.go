@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+func TestOpenInitializesSchemaMigrations(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "tenant.sqlite")
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer store.Close()
+
+	var versionCount int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 1`).Scan(&versionCount); err != nil {
+		t.Fatalf("schema_migrations query: %v", err)
+	}
+	if versionCount != 1 {
+		t.Fatalf("expected schema migration version 1 to be recorded, got %d", versionCount)
+	}
+}
+
 func TestCreateInteractionTouchesContactUpdatedAt(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "tenant.sqlite")
